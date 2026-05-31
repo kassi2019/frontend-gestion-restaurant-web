@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import type { RootState } from '../store';
 import { useToast } from '../services/toast';
 import { onNewCommande, onCommandeStatusChange } from '../services/socket';
+import { addToQueue, getIsOnline } from '../services/offline';
 
 const STATUTS = ['EN_ATTENTE', 'VALIDEE', 'EN_PREPARATION', 'PRETE', 'SERVIE', 'PAYEE'];
 
@@ -68,12 +69,31 @@ export default function CommandesPage() {
     if (!newCmd.tableId) { toast.error('Sélectionnez une table'); return; }
     if (cart.length === 0) { toast.error('Ajoutez au moins un plat'); return; }
     setSaving(true);
+    const details = cart.map(c => ({ menuId: c.menuId, quantite: c.quantite, prix: c.prix }));
+    const orderData = { ...newCmd, details, serveurId: user?.id, restaurantId: user?.restaurantId };
+
+    if (!getIsOnline()) {
+      // Mode hors-ligne : sauvegarder en local
+      addToQueue('commande', orderData);
+      toast.success('Commande enregistrée en local (sync auto)');
+      setShowCreate(false); resetCreate();
+      setSaving(false);
+      return;
+    }
+
     try {
-      const details = cart.map(c => ({ menuId: c.menuId, quantite: c.quantite, prix: c.prix }));
-      await commandesApi.create({ ...newCmd, details, serveurId: user?.id, restaurantId: user?.restaurantId });
+      await commandesApi.create(orderData);
       toast.success('Commande créée !');
       setShowCreate(false); resetCreate(); load();
-    } catch (err: any) { toast.error(err.response?.data?.message || 'Erreur'); }
+    } catch (err: any) {
+      if (!err.response || err.code === 'ERR_NETWORK') {
+        addToQueue('commande', orderData);
+        toast.success('Commande sauvegardée en local (connexion perdue)');
+        setShowCreate(false); resetCreate();
+      } else {
+        toast.error(err.response?.data?.message || 'Erreur');
+      }
+    }
     finally { setSaving(false); }
   };
 
@@ -208,16 +228,19 @@ export default function CommandesPage() {
 
                 {/* Plats */}
                 <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
-                  {menus.filter(m => m.categorieId === activeCat).map(m => (
-                    <button key={m.id} onClick={() => addToCart(m)}
-                      className="flex items-center justify-between p-3 rounded-xl bg-gray-50 hover:bg-orange-50 cursor-pointer transition-colors text-left border border-gray-100">
+                  {menus.filter(m => m.categorieId === activeCat).map(m => {
+                    const indispo = m.disponibleDemain === 1;
+                    return (
+                    <button key={m.id} onClick={() => !indispo && addToCart(m)}
+                      disabled={indispo}
+                      className={`flex items-center justify-between p-3 rounded-xl text-left border transition-colors ${indispo ? 'bg-gray-100 border-gray-200 opacity-50 cursor-not-allowed' : 'bg-gray-50 hover:bg-orange-50 cursor-pointer border-gray-100'}`}>
                       <div>
-                        <p className="font-semibold text-sm text-gray-800">{m.nom}</p>
-                        <p className="text-xs text-gray-400">{m.tempsPreparation} min</p>
+                        <p className={`font-semibold text-sm ${indispo ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{m.nom}</p>
+                        <p className="text-xs text-gray-400">{m.tempsPreparation} min {indispo ? '· Indisponible' : ''}</p>
                       </div>
-                      <p className="font-bold text-sm text-orange-500">{parseFloat(m.prix).toFixed(2)} {user?.devise || '€'}</p>
+                      <p className={`font-bold text-sm ${indispo ? 'text-gray-400' : 'text-orange-500'}`}>{parseFloat(m.prix).toFixed(2)} {user?.devise || '€'}</p>
                     </button>
-                  ))}
+                  )})}
                 </div>
               </div>
 

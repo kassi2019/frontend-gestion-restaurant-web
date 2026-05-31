@@ -5,6 +5,7 @@ import type { RootState } from '../store';
 import { logout } from '../store/authSlice';
 import { API_URL } from '../config';
 import { connectSocket, disconnectSocket, onNotification } from '../services/socket';
+import OfflineBanner from './OfflineBanner';
 
 const allMenuItems = [
   { path: '/', label: 'Accueil', icon: '🏠', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'] },
@@ -113,8 +114,11 @@ export default function Layout() {
       </button>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
-        <Outlet />
+      <main className="flex-1 overflow-y-auto flex flex-col">
+        <OfflineBanner />
+        <div className="flex-1">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

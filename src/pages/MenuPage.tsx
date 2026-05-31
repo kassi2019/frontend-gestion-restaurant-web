@@ -23,6 +23,11 @@ export default function MenuPage() {
   const [preview, setPreview] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  // Variantes
+  const [showVariantModal, setShowVariantModal] = useState(false);
+  const [variantMenu, setVariantMenu] = useState<any>(null);
+  const [variantForm, setVariantForm] = useState({ nom: '', prix: '' });
+  const [variantSaving, setVariantSaving] = useState(false);
 
   const load = async () => {
     try {
@@ -84,6 +89,26 @@ export default function MenuPage() {
     dialog.confirm({ title: 'Supprimer ce plat ?', message: 'Cette action est irréversible.', danger: true, confirmLabel: 'Supprimer', onConfirm: async () => { try { await menuApi.deleteMenu(id); load(); toast.success('Plat supprimé'); } catch {} } });
   };
 
+  // ---- Variantes ----
+  const openVariants = (m: any) => { setVariantMenu(m); setShowVariantModal(true); setVariantForm({ nom: '', prix: '' }); };
+
+  const handleAddVariant = async () => {
+    if (!variantForm.nom || !variantForm.prix) { toast.error('Nom et prix requis'); return; }
+    setVariantSaving(true);
+    try {
+      await menuApi.addVariant(variantMenu.id, { nom: variantForm.nom, prix: parseFloat(variantForm.prix) });
+      toast.success('Variante ajoutée');
+      setVariantForm({ nom: '', prix: '' }); load();
+    } catch (err: any) { toast.error(err.response?.data?.message || 'Erreur'); }
+    finally { setVariantSaving(false); }
+  };
+
+  const handleDeleteVariant = async (variantId: number) => {
+    dialog.confirm({ title: 'Supprimer cette variante ?', message: 'Cette action est irréversible.', danger: true, confirmLabel: 'Supprimer', onConfirm: async () => {
+      try { await menuApi.deleteVariant(variantId); load(); toast.success('Variante supprimée'); } catch {}
+    }});
+  };
+
   const handleAddCat = async () => {
     if (!catForm.nom) return;
     try { await menuApi.createCategorie({ ...catForm, restaurantId: user?.restaurantId }); setShowCatForm(false); setCatForm({ nom: '', ordreService: 1, destination: 'CUISINE' }); load(); } catch {}
@@ -102,6 +127,22 @@ export default function MenuPage() {
         <div className="flex gap-2">
           <button onClick={() => setShowCatForm(true)} className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl font-semibold cursor-pointer hover:bg-gray-50">+ Catégorie</button>
           <button onClick={() => { resetForm(); setShowForm(true); }} className="bg-orange-500 text-white px-5 py-2 rounded-xl font-semibold cursor-pointer hover:bg-orange-600">+ Plat</button>
+          <a href={`${API_URL}/modele-menu.csv`} download className="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-semibold cursor-pointer hover:bg-gray-200 no-underline">📄 Modèle</a>
+          <label className="bg-green-500 text-white px-4 py-2 rounded-xl font-semibold cursor-pointer hover:bg-green-600">
+            📥 Importer CSV
+            <input type="file" accept=".csv" className="hidden" onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const fd = new FormData();
+              fd.append('file', file);
+              try {
+                const { data } = await menuApi.importCsv(fd);
+                toast.success(data.message || 'Import réussi');
+                load();
+              } catch (err: any) { toast.error(err.response?.data?.message || 'Erreur import'); }
+              e.target.value = '';
+            }} />
+          </label>
         </div>
       </div>
 
@@ -135,8 +176,27 @@ export default function MenuPage() {
             <div className="p-4">
               <h3 className="font-bold text-gray-800 mb-1">{m.nom}</h3>
               <p className="text-2xl font-extrabold text-orange-500 mb-2">{m.prix} {user?.devise || '€'}</p>
-              <p className="text-xs text-gray-400 mb-3">{m.tempsPreparation} min · {m.disponibilite ? '✅ Dispo' : '❌ Indisponible'}</p>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2 mb-3">
+                <p className="text-xs text-gray-400">{m.tempsPreparation} min</p>
+                <button onClick={async (e) => { e.stopPropagation(); try { await menuApi.toggleDisponibleDemain(m.id); load(); } catch {} }}
+                  className={`text-xs px-2 py-0.5 rounded-full font-semibold cursor-pointer hover:opacity-80 ${m.disponibleDemain === 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                  {m.disponibleDemain === 0 ? '✅ Disponible' : '❌ Pas disponible'}
+                </button>
+              </div>
+              {/* Variantes */}
+              {m.variants?.length > 0 && (
+                <div className="mb-3">
+                  {m.variants.map((v: any) => (
+                    <div key={v.id} className="flex items-center justify-between text-xs px-2 py-1 bg-gray-50 rounded-lg mb-1">
+                      <span className="font-medium text-gray-700">{v.nom}</span>
+                      <span className="font-bold text-orange-500">{parseFloat(v.prix).toFixed(2)} {user?.devise || '€'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={(e) => { e.stopPropagation(); openVariants(m); }}
+                  className="text-xs px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg font-semibold cursor-pointer hover:bg-purple-100">📋 Variantes ({m.variants?.length || 0})</button>
                 <button onClick={() => { setEditing(m); setForm({ nom: m.nom, prix: String(m.prix), categorieId: m.categorieId, tempsPreparation: m.tempsPreparation }); setShowForm(true); }}
                   className="text-xs px-3 py-1.5 bg-gray-100 rounded-lg font-semibold cursor-pointer hover:bg-gray-200">✏️ Modifier</button>
                 <button onClick={() => handleDelete(m.id)} className="text-xs px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-semibold cursor-pointer hover:bg-red-100 ml-auto">🗑 Supprimer</button>
@@ -204,6 +264,46 @@ export default function MenuPage() {
             </select>
             <button onClick={handleAddCat} className="w-full py-2.5 bg-orange-500 text-white rounded-xl font-bold cursor-pointer">Créer</button>
             <button onClick={() => setShowCatForm(false)} className="w-full mt-3 py-2 text-gray-400 cursor-pointer">Annuler</button>
+          </div>
+        </div>
+      )}
+      {/* Modal Variantes */}
+      {showVariantModal && variantMenu && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowVariantModal(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto animate-slideUp" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-1">📋 Variantes</h3>
+            <p className="text-sm text-gray-400 mb-4">{variantMenu.nom} — {variantMenu.variants?.length || 0} variante(s)</p>
+
+            {variantMenu.variants?.length > 0 && (
+              <div className="space-y-2 mb-4">
+                {variantMenu.variants.map((v: any) => (
+                  <div key={v.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border">
+                    <div>
+                      <p className="font-semibold text-sm text-gray-800">{v.nom}</p>
+                      <p className="font-bold text-sm text-orange-500">{parseFloat(v.prix).toFixed(2)} {user?.devise || '€'}</p>
+                    </div>
+                    <button onClick={() => handleDeleteVariant(v.id)}
+                      className="text-xs px-2 py-1 rounded-lg bg-red-50 text-red-500 cursor-pointer hover:bg-red-100">🗑</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="border-t pt-4">
+              <h4 className="font-semibold text-gray-800 mb-3">+ Ajouter une variante</h4>
+              <label className="block text-sm font-semibold text-gray-600 mb-1.5">Nom</label>
+              <input value={variantForm.nom} onChange={e => setVariantForm({...variantForm, nom: e.target.value})}
+                placeholder="Ex: Avec alcool" className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-3" />
+              <label className="block text-sm font-semibold text-gray-600 mb-1.5">Prix</label>
+              <input value={variantForm.prix} onChange={e => setVariantForm({...variantForm, prix: e.target.value})}
+                type="number" step="0.01" placeholder="Ex: 4000" className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-4" />
+              <button onClick={handleAddVariant} disabled={variantSaving}
+                className="w-full py-2.5 bg-purple-500 text-white rounded-xl font-bold cursor-pointer hover:bg-purple-600 disabled:opacity-60 flex items-center justify-center gap-2">
+                {variantSaving && <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />}
+                Ajouter la variante
+              </button>
+            </div>
+            <button onClick={() => setShowVariantModal(false)} className="w-full mt-3 py-2 text-gray-400 cursor-pointer">Fermer</button>
           </div>
         </div>
       )}

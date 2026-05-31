@@ -118,7 +118,7 @@ export default function AbonnementPage() {
 
       {/* Clôture globale */}
       {isAdmin && resto && (
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+        <div id="cloture-section" className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
           <h3 className="font-bold text-gray-800 mb-3">🔒 Clôture Globale</h3>
           <div className="mb-4">
             <span className={`px-3 py-1 rounded-full text-sm font-bold ${resto.statut === 'FERME' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
