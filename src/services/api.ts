@@ -55,12 +55,12 @@ export const menuApi = {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
   toggleDisponibleDemain: (id: number) => api.patch(`/menu/${id}/toggle-demain`),
-  uploadImage: (formData: FormData) => api.post('/menu/upload', formData, {
+  uploadImage: (id: number, formData: FormData) => api.post(`/menu/${id}/image`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
   getVariants: (menuId: number) => api.get(`/menu/${menuId}/variants`),
-  addVariant: (menuId: number, data: { nom: string; prix: number }) => api.post(`/menu/${menuId}/variants`, data),
-  updateVariant: (variantId: number, data: { nom?: string; prix?: number }) => api.patch(`/menu/variants/${variantId}`, data),
+  addVariant: (menuId: number, data: { nom: string; prix: number; image?: string }) => api.post(`/menu/${menuId}/variants`, data),
+  updateVariant: (variantId: number, data: { nom?: string; prix?: number; image?: string }) => api.patch(`/menu/variants/${variantId}`, data),
   deleteVariant: (variantId: number) => api.delete(`/menu/variants/${variantId}`),
 };
 

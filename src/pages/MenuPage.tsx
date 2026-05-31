@@ -26,8 +26,9 @@ export default function MenuPage() {
   // Variantes
   const [showVariantModal, setShowVariantModal] = useState(false);
   const [variantMenu, setVariantMenu] = useState<any>(null);
-  const [variantForm, setVariantForm] = useState({ nom: '', prix: '' });
+  const [variantForm, setVariantForm] = useState({ nom: '', prix: '', image: '' });
   const [variantSaving, setVariantSaving] = useState(false);
+  const [variantImage, setVariantImage] = useState<File | null>(null);
 
   const load = async () => {
     try {
@@ -64,23 +65,25 @@ export default function MenuPage() {
   const handleSave = async () => {
     if (!form.nom || !form.prix) return;
     try {
-      let imageUrl = editing?.image || '';
-      if (selectedImage) {
-        setImageUploading(true);
-        const fd = new FormData();
-        fd.append('image', selectedImage);
-        const { data: uploadData } = await menuApi.uploadImage(fd);
-        imageUrl = uploadData.imageUrl || uploadData.url || '';
-        setImageUploading(false);
-      }
+      const payload = { ...form, prix: parseFloat(form.prix) };
 
-      const payload = { ...form, prix: parseFloat(form.prix), image: imageUrl };
-
+      let menuId = editing?.id;
       if (editing) {
         await menuApi.updateMenu(editing.id, payload);
       } else {
-        await menuApi.createMenu({ ...payload, categorieId: activeCat, restaurantId: user?.restaurantId });
+        const { data: newMenu } = await menuApi.createMenu({ ...payload, categorieId: activeCat, restaurantId: user?.restaurantId });
+        menuId = newMenu.id;
       }
+
+      // Upload image after menu is created/updated
+      if (selectedImage && menuId) {
+        setImageUploading(true);
+        const fd = new FormData();
+        fd.append('image', selectedImage);
+        try { await menuApi.uploadImage(menuId, fd); } catch {}
+        setImageUploading(false);
+      }
+
       setShowForm(false); resetForm(); load();
     } catch (err: any) { toast.error(err.response?.data?.message || 'Erreur'); setImageUploading(false); }
   };
@@ -90,15 +93,21 @@ export default function MenuPage() {
   };
 
   // ---- Variantes ----
-  const openVariants = (m: any) => { setVariantMenu(m); setShowVariantModal(true); setVariantForm({ nom: '', prix: '' }); };
+  const openVariants = (m: any) => { setVariantMenu(m); setShowVariantModal(true); setVariantForm({ nom: '', prix: '', image: '' }); setVariantImage(null); };
 
   const handleAddVariant = async () => {
     if (!variantForm.nom || !variantForm.prix) { toast.error('Nom et prix requis'); return; }
     setVariantSaving(true);
     try {
-      await menuApi.addVariant(variantMenu.id, { nom: variantForm.nom, prix: parseFloat(variantForm.prix) });
+      let imageUrl = variantForm.image || '';
+      if (variantImage && variantMenu?.id) {
+        const fd = new FormData(); fd.append('image', variantImage);
+        const { data: uploadData } = await menuApi.uploadImage(variantMenu.id, fd);
+        imageUrl = uploadData.imageUrl || uploadData.url || '';
+      }
+      await menuApi.addVariant(variantMenu.id, { nom: variantForm.nom, prix: parseFloat(variantForm.prix), image: imageUrl });
       toast.success('Variante ajoutée');
-      setVariantForm({ nom: '', prix: '' }); load();
+      setVariantForm({ nom: '', prix: '', image: '' }); setVariantImage(null); load();
     } catch (err: any) { toast.error(err.response?.data?.message || 'Erreur'); }
     finally { setVariantSaving(false); }
   };
@@ -277,8 +286,13 @@ export default function MenuPage() {
             {variantMenu.variants?.length > 0 && (
               <div className="space-y-2 mb-4">
                 {variantMenu.variants.map((v: any) => (
-                  <div key={v.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border">
-                    <div>
+                  <div key={v.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border">
+                    {(v.image || variantMenu.image) ? (
+                      <img src={(v.image ? imgUrl(v.image) : imgUrl(variantMenu.image)) || ''} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-gray-200 flex items-center justify-center text-xs text-gray-400">🍽</div>
+                    )}
+                    <div className="flex-1">
                       <p className="font-semibold text-sm text-gray-800">{v.nom}</p>
                       <p className="font-bold text-sm text-orange-500">{parseFloat(v.prix).toFixed(2)} {user?.devise || '€'}</p>
                     </div>
@@ -296,7 +310,10 @@ export default function MenuPage() {
                 placeholder="Ex: Avec alcool" className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-3" />
               <label className="block text-sm font-semibold text-gray-600 mb-1.5">Prix</label>
               <input value={variantForm.prix} onChange={e => setVariantForm({...variantForm, prix: e.target.value})}
-                type="number" step="0.01" placeholder="Ex: 4000" className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-4" />
+                type="number" step="0.01" placeholder="Ex: 4000" className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-3" />
+              <label className="block text-sm font-semibold text-gray-600 mb-1.5">Image (optionnel)</label>
+              <input type="file" accept="image/*" onChange={e => setVariantImage(e.target.files?.[0] || null)}
+                className="w-full text-sm mb-4" />
               <button onClick={handleAddVariant} disabled={variantSaving}
                 className="w-full py-2.5 bg-purple-500 text-white rounded-xl font-bold cursor-pointer hover:bg-purple-600 disabled:opacity-60 flex items-center justify-center gap-2">
                 {variantSaving && <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />}
