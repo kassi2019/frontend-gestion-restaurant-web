@@ -1,11 +1,14 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { authApi } from '../services/api';
 
+export interface ModuleInfo { id: number; nom: string; icon: string; route: string; }
+
 export interface User {
   id: number; nom: string; telephone: string; role: string;
   photo?: string; restaurantId: number; devise?: string;
   restaurantNom?: string; restaurantTelephone?: string;
   typeAbonnement?: string; dateFinAbonnement?: string | null;
+  modules?: ModuleInfo[];
 }
 
 interface AuthState {

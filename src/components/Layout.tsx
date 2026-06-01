@@ -77,9 +77,9 @@ export default function Layout() {
 
         {/* Menu */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          {allMenuItems
-            .filter(m => m.roles.includes(user?.role || ''))
-            .map((m) => (
+          {(user?.modules?.length ? user.modules.map((m: any) => ({ path: m.route, label: m.nom, icon: m.icon })) : allMenuItems)
+            .filter((m: any) => allMenuItems.find(a => a.path === m.path)?.roles.includes(user?.role || '') ?? true)
+            .map((m: any) => (
             <NavLink key={m.path} to={m.path} end={m.path === '/'}
               onClick={() => { if (m.path === '/notifications') setNotifBadge(0); }}
               className={({ isActive }) =>
