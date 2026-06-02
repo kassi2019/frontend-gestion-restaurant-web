@@ -149,7 +149,7 @@ export default function UsersPage() {
 
             <label className="block text-sm font-semibold text-gray-600 mb-1.5">Rôle</label>
             <select value={form.role} onChange={e => setForm({...form, role: e.target.value})} className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-4">
-              <option>SERVEUR</option><option>CUISINE</option><option>BAR</option><option>CAISSIER</option><option>MANAGER</option><option>ADMIN</option>
+              <option>SERVEUR</option><option>CUISINE</option><option>BAR</option><option>CAISSIER</option><option>RECEPTIONNISTE</option><option>MANAGER</option><option>ADMIN</option>
             </select>
 
             <button onClick={handleSave} disabled={saving}

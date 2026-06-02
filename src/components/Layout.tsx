@@ -8,15 +8,16 @@ import { connectSocket, disconnectSocket, onNotification } from '../services/soc
 import OfflineBanner from './OfflineBanner';
 
 const allMenuItems = [
-  { path: '/', label: 'Accueil', icon: '🏠', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'] },
-  { path: '/tables', label: 'Tables', icon: '🪑', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SERVEUR'] },
+  { path: '/', label: 'Accueil', icon: '🏠', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'RECEPTIONNISTE', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'] },
+  { path: '/tables', label: 'Tables', icon: '🪑', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'RECEPTIONNISTE', 'SERVEUR'] },
   { path: '/assign-tables', label: 'Affectation', icon: '🔄', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER'] },
-  { path: '/commandes', label: 'Commandes', icon: '📋', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR'] },
-  { path: '/menu', label: 'Menu', icon: '🍽️', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER'] },
-  { path: '/planning', label: 'Planning', icon: '📅', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'] },
+  { path: '/commandes', label: 'Commandes', icon: '📋', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'RECEPTIONNISTE', 'SERVEUR', 'CUISINE', 'BAR'] },
+  { path: '/reception', label: 'Réception', icon: '📋', roles: ['RECEPTIONNISTE'] },
+  { path: '/menu', label: 'Menu', icon: '🍽️', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'RECEPTIONNISTE'] },
+  { path: '/planning', label: 'Planning', icon: '📅', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'RECEPTIONNISTE', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'] },
   { path: '/caisse', label: 'Caisse', icon: '💰', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'CAISSIER'] },
   { path: '/users', label: 'Users', icon: '👥', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER'] },
-  { path: '/notifications', label: 'Notifs', icon: '🔔', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'] },
+  { path: '/notifications', label: 'Notifs', icon: '🔔', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'RECEPTIONNISTE', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'] },
   { path: '/stats', label: 'Stats', icon: '📊', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER'] },
   { path: '/parametres', label: 'Paramètres', icon: '⚙️', roles: ['SUPER_ADMIN', 'ADMIN'] },
   { path: '/abonnement', label: 'Abonnement', icon: '⭐', roles: ['SUPER_ADMIN', 'ADMIN'] },
@@ -52,8 +53,12 @@ export default function Layout() {
       <aside className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-[var(--border)] flex flex-col transition-all duration-300 shrink-0`}>
         {/* Logo */}
         <div className="h-16 flex items-center gap-3 px-4 border-b border-[var(--border)]">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-lg shrink-0">🍽</div>
-          {sidebarOpen && <span className="font-extrabold text-gray-800 text-lg">RestoPro</span>}
+          {user?.restaurantLogo ? (
+            <img src={user.restaurantLogo.startsWith('http') ? user.restaurantLogo : `${API_URL}${user.restaurantLogo}`} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0" />
+          ) : (
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-lg shrink-0">🍽</div>
+          )}
+          {sidebarOpen && <span className="font-extrabold text-gray-800 text-lg">{user?.restaurantNom || 'RestoPro'}</span>}
         </div>
 
         {/* User */}

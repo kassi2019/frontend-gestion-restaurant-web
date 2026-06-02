@@ -17,6 +17,7 @@ import SuperCodesPage from './pages/SuperCodesPage';
 import ParametresPage from './pages/ParametresPage';
 import NotificationsPage from './pages/NotificationsPage';
 import AssignTablesPage from './pages/AssignTablesPage';
+import ReceptionPage from './pages/ReceptionPage';
 import { ToastProvider } from './services/toast';
 import { DialogProvider } from './services/dialog';
 
@@ -48,6 +49,7 @@ export default function App() {
             <Route path="/planning" element={<PlanningPage />} />
             <Route path="/caisse" element={<CaissePage />} />
             <Route path="/assign-tables" element={<AssignTablesPage />} />
+            <Route path="/reception" element={<ReceptionPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/stats" element={<StatsPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />

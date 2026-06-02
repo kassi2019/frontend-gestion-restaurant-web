@@ -129,7 +129,7 @@ export default function CaissePage() {
             ))}
           </div>
           <button onClick={handleCloture}
-            className="w-full py-3 bg-red-500 text-white rounded-xl font-bold cursor-pointer hover:bg-red-600 flex items-center justify-center gap-2">
+            className="w-auto px-6 py-2 bg-red-500 text-white rounded-xl font-semibold text-sm cursor-pointer hover:bg-red-600 flex items-center justify-center gap-2">
             🔒 Clôturer la caisse
           </button>
         </div>

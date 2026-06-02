@@ -6,7 +6,7 @@ export interface ModuleInfo { id: number; nom: string; icon: string; route: stri
 export interface User {
   id: number; nom: string; telephone: string; role: string;
   photo?: string; restaurantId: number; devise?: string;
-  restaurantNom?: string; restaurantTelephone?: string;
+  restaurantNom?: string; restaurantLogo?: string; restaurantTelephone?: string;
   typeAbonnement?: string; dateFinAbonnement?: string | null;
   modules?: ModuleInfo[];
 }

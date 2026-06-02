@@ -10,17 +10,19 @@ export default function ParametresPage() {
   const user = useSelector((s: RootState) => s.auth.user);
   const dispatch = useDispatch();
   const toast = useToast();
-  const [form, setForm] = useState({ nom: '', adresse: '', telephone: '', devise: '' });
+  const [form, setForm] = useState({ nom: '', adresse: '', telephone: '', devise: '', logo: '' });
   const [loading, setLoading] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const logoRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
 
   useEffect(() => {
     if (user?.restaurantId) {
       restaurantApi.getInfo(user.restaurantId).then(({ data }) => {
-        setForm({ nom: data.nom || '', adresse: data.adresse || '', telephone: data.telephone || '', devise: data.devise || '' });
+        setForm({ nom: data.nom || '', adresse: data.adresse || '', telephone: data.telephone || '', devise: data.devise || '', logo: data.logo || '' });
       }).catch(() => {});
     }
   }, [user?.restaurantId]);
@@ -47,6 +49,20 @@ export default function ParametresPage() {
       dispatch(updateUser({ photo: data.photoUrl || data.url || data.photo }));
     } catch { toast.error('Erreur upload photo'); }
     finally { setPhotoUploading(false); }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.restaurantId) return;
+    setLogoUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const { data } = await restaurantApi.uploadLogo(user.restaurantId, fd);
+      setForm({ ...form, logo: data.logoUrl });
+      toast.success('Logo mis à jour');
+    } catch { toast.error('Erreur upload logo'); }
+    finally { setLogoUploading(false); }
   };
 
   const photoUrl = user?.photo
@@ -94,6 +110,26 @@ export default function ParametresPage() {
       {/* Infos restaurant */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
         <h3 className="font-bold text-gray-800 mb-4">🏪 Informations du restaurant</h3>
+
+        {/* Logo du restaurant */}
+        <label className="block text-sm font-semibold text-gray-600 mb-1.5">Logo du restaurant</label>
+        <div className="flex items-center gap-4 mb-4">
+          <div className="relative cursor-pointer" onClick={() => logoRef.current?.click()} title="Cliquer pour changer le logo">
+            {form.logo ? (
+              <img src={form.logo.startsWith('http') ? form.logo : `${API_URL}${form.logo}`} alt="" className="w-24 h-24 rounded-2xl object-cover border-2 border-gray-200" />
+            ) : (
+              <div className="w-24 h-24 rounded-2xl bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center text-3xl text-gray-400">
+                🏪
+              </div>
+            )}
+            <div className="absolute bottom-0 right-0 w-7 h-7 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs">📷</div>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Format JPEG, PNG ou WEBP</p>
+            {logoUploading && <p className="text-xs text-orange-500 mt-1">Upload en cours...</p>}
+          </div>
+        </div>
+        <input ref={logoRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
 
         <label className="block text-sm font-semibold text-gray-600 mb-1.5">Nom du restaurant</label>
         <input value={form.nom} onChange={e => setForm({...form, nom: e.target.value})} placeholder="Ex: Restaurant Chez Pedro" className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-4" />

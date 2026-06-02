@@ -82,6 +82,7 @@ export const commandesApi = {
   getByCuisine: () => api.get('/commandes/cuisine'),
   getByBar: () => api.get('/commandes/bar'),
   updateStatut: (id: number, statut: string) => api.patch(`/commandes/${id}/statut`, { statut }),
+  assignServeur: (id: number, serveurId: number) => api.patch(`/commandes/${id}/assign-serveur`, { serveurId }),
   updateDetailStatut: (id: number, detailId: number, statut: string) => api.patch(`/commandes/${id}/detail/${detailId}`, { statut }),
   toutPret: (id: number) => api.patch(`/commandes/${id}/tout-pret`),
 };
@@ -118,6 +119,7 @@ export const planningApi = {
 
 export const usersApi = {
   getAll: () => api.get('/users'),
+  findByRole: (role: string) => api.get(`/users/role/${role}`),
   update: (id: number, data: any) => api.patch(`/users/${id}`, data),
   updateStatut: (id: number, statut: string) => api.patch(`/users/${id}/statut?statut=${statut}`),
   delete: (id: number) => api.delete(`/users/${id}`),
@@ -126,6 +128,9 @@ export const usersApi = {
 export const restaurantApi = {
   getInfo: (id: number) => api.get(`/restaurants/${id}`),
   update: (id: number, data: any) => api.patch(`/restaurants/${id}`, data),
+  uploadLogo: (id: number, formData: FormData) => api.post(`/restaurants/${id}/logo`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
 };
 
 export const notificationsApi = {
