@@ -13,6 +13,8 @@ const allMenuItems = [
   { path: '/assign-tables', label: 'Affectation', icon: '🔄', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER'] },
   { path: '/commandes', label: 'Commandes', icon: '📋', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'RECEPTIONNISTE', 'SERVEUR', 'CUISINE', 'BAR'] },
   { path: '/reception', label: 'Réception', icon: '📋', roles: ['RECEPTIONNISTE'] },
+  { path: '/reservations', label: 'Réservations', icon: '🪑', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'RECEPTIONNISTE'] },
+  { path: '/livraisons', label: 'Livraisons', icon: '🚚', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'RECEPTIONNISTE'] },
   { path: '/menu', label: 'Menu', icon: '🍽️', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'RECEPTIONNISTE'] },
   { path: '/planning', label: 'Planning', icon: '📅', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'RECEPTIONNISTE', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'] },
   { path: '/caisse', label: 'Caisse', icon: '💰', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'CAISSIER'] },

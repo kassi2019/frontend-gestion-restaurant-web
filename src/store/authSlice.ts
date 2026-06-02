@@ -8,6 +8,7 @@ export interface User {
   photo?: string; restaurantId: number; devise?: string;
   restaurantNom?: string; restaurantLogo?: string; restaurantTelephone?: string;
   typeAbonnement?: string; dateFinAbonnement?: string | null;
+  modeGestion?: string;
   modules?: ModuleInfo[];
 }
 

@@ -4,7 +4,7 @@ import { useSelector } from 'react-redux';
 import type { RootState } from '../store';
 import { API_URL } from '../config';
 import { useToast } from '../services/toast';
-import { connectSocket, onNotification } from '../services/socket';
+import { connectSocket, onNotification, onNewCommande, onCommandeStatusChange } from '../services/socket';
 
 type TabType = 'arrivees' | 'validees' | 'payees';
 
@@ -12,6 +12,8 @@ export default function ReceptionPage() {
   const user = useSelector((s: RootState) => s.auth.user);
   const toast = useToast();
   const devise = user?.devise || '€';
+  const modeGestion = user?.modeGestion || 'RECEPTION';
+  const isModeServeur = modeGestion === 'SERVEUR';
 
   const [loading, setLoading] = useState(true);
   const [commandes, setCommandes] = useState<any[]>([]);
@@ -52,12 +54,20 @@ export default function ReceptionPage() {
 
   useEffect(() => { loadData(); }, []);
 
-  // Socket
+  // Polling automatique en arrière-plan (toutes les 10 secondes)
+  useEffect(() => {
+    const interval = setInterval(() => { loadData(); }, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Socket temps réel
   useEffect(() => {
     if (user?.id && user?.role) {
       connectSocket(user.id, user.role);
-      const unsub = onNotification(() => loadData());
-      return () => { unsub(); };
+      const u1 = onNotification(() => loadData());
+      const u2 = onNewCommande(() => loadData());
+      const u3 = onCommandeStatusChange(() => loadData());
+      return () => { u1(); u2(); u3(); };
     }
   }, [user?.id, user?.role]);
 
@@ -92,10 +102,32 @@ export default function ReceptionPage() {
   });
 
   const arrivees = filteredCommandes.filter((c: any) => c.statut === 'EN_ATTENTE');
-  const validees = filteredCommandes.filter((c: any) => c.statut === 'VALIDEE');
-  const payees = filteredCommandes.filter((c: any) => c.statut === 'PAYEE');
-  const isSearching = searchTerm.trim() !== '' || filterDate !== '';
-  const currentData = isSearching ? filteredCommandes : (activeTab === 'arrivees' ? arrivees : activeTab === 'validees' ? validees : payees);
+  const validees = filteredCommandes.filter((c: any) => c.statut === 'VALIDEE' || c.statut === 'SERVEUR_VALIDE' || c.statut === 'RECEPTION_VALIDE');
+  const payees = filteredCommandes.filter((c: any) => c.statut === 'PAYEE' || c.statut === 'SERVIE');
+  const isSearching = searchTerm.trim() !== '';
+
+  // Grouper par table
+  const grouperParTable = (cmds: any[]) => {
+    const groupes: Record<number, any> = {};
+    for (const c of cmds) {
+      if (!c) continue;
+      const tid = c.tableId;
+      if (!groupes[tid]) {
+        groupes[tid] = {
+          tableId: tid, tableNumero: getTableNumero(tid), commandes: [], montantTotal: 0,
+          serveurId: c.serveurId, typeCommande: c.typeCommande, statut: c.statut,
+        };
+      }
+      groupes[tid].commandes.push(c);
+      groupes[tid].montantTotal += Number(c.montantTotal || 0);
+      if (c.statut === 'EN_ATTENTE') groupes[tid].statut = 'EN_ATTENTE';
+      else if (c.statut === 'VALIDEE' && groupes[tid].statut !== 'EN_ATTENTE') groupes[tid].statut = 'VALIDEE';
+    }
+    return Object.values(groupes);
+  };
+
+  const rawData = isSearching ? filteredCommandes : (activeTab === 'arrivees' ? arrivees : activeTab === 'validees' ? validees : payees);
+  const currentData = grouperParTable(rawData);
 
   const getTableNumero = (tableId: number) => tables.find((t: any) => t.id === tableId)?.numero || '?';
   const getServeurNom = (serveurId: number) => serveurs.find((s: any) => s.id === serveurId)?.nom || null;
@@ -121,12 +153,10 @@ export default function ReceptionPage() {
 
   // Valider → VALIDEE → tickets
   const handleValider = async (cmd: any) => {
-    const isEmporter = cmd.typeCommande === 'A_EMPORTER' || cmd.table?.zone?.toUpperCase() === 'COMPTOIR' || cmd.table?.numero?.toUpperCase() === 'T00';
-    if (!cmd.serveurId && !isEmporter) { toast.error('Assigner un serveur avant de valider'); return; }
     try {
-      await commandesApi.updateStatut(cmd.id, 'VALIDEE');
+      await commandesApi.updateStatut(cmd.id, 'RECEPTION_VALIDE');
       toast.success('Commande validée !');
-      setTicketCmd({ ...cmd, statut: 'VALIDEE' });
+      setTicketCmd({ ...cmd, statut: 'RECEPTION_VALIDE' });
       setShowTickets(true);
       loadData();
     } catch (err: any) { toast.error(err.response?.data?.message || 'Erreur validation'); }
@@ -147,10 +177,10 @@ export default function ReceptionPage() {
   };
 
   const statutColor = (s: string) => {
-    switch (s) { case 'EN_ATTENTE': return '#FF9800'; case 'VALIDEE': return '#2196F3'; case 'PAYEE': return '#4CAF50'; default: return '#999'; }
+    switch (s) { case 'EN_ATTENTE': return '#FF9800'; case 'VALIDEE': case 'SERVEUR_VALIDE': return '#2196F3'; case 'RECEPTION_VALIDE': return '#4CAF50'; case 'PAYEE': case 'SERVIE': return '#9C27B0'; default: return '#999'; }
   };
   const statutLabel = (s: string) => {
-    switch (s) { case 'EN_ATTENTE': return 'En attente'; case 'VALIDEE': return 'Validée'; case 'PAYEE': return 'Payée'; default: return s; }
+    switch (s) { case 'EN_ATTENTE': return 'En attente'; case 'VALIDEE': case 'SERVEUR_VALIDE': return 'Serv. validé'; case 'RECEPTION_VALIDE': return 'Récep. validé'; case 'PAYEE': case 'SERVIE': return 'Payée'; default: return s; }
   };
 
   const tabs = [
@@ -248,36 +278,45 @@ export default function ReceptionPage() {
   };
 
   // Imprimer les 4 tickets d'un coup (format rouleau thermique)
-  const imprimerTout = (cmd: any) => {
-    const tableNumero = getTableNumero(cmd.tableId);
-    const serveurNom = getServeurNom(cmd.serveurId) || '—';
-    const dateStr = new Date(cmd.dateCommande).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const cmdRef = `CMD-${String(cmd.id).padStart(4, '0')}`;
+  const imprimerTout = (item: any) => {
+    // Si item groupé, fusionner toutes les commandes
+    const commandes = item.commandes || [item];
+    const tableNumero = item.tableNumero || getTableNumero(item.tableId);
+    const serveurNom = getServeurNom(item.serveurId) || '—';
     const logoUrl = user?.restaurantLogo
       ? (user.restaurantLogo.startsWith('http') ? user.restaurantLogo : `${API_URL}${user.restaurantLogo}`)
       : null;
-    const total = Number(cmd.montantTotal || 0).toFixed(2);
 
-    const articlesCuisine = getDetailsCuisine(cmd);
-    const articlesBar = getDetailsBar(cmd);
-    const articles = cmd.details || [];
+    // Fusionner tous les détails
+    const allDetails: any[] = [];
+    const allCuisine: any[] = [];
+    const allBar: any[] = [];
+    const refs: string[] = [];
+    commandes.forEach((cmd: any) => {
+      refs.push('CMD-' + String(cmd.id).padStart(4, '0'));
+      allDetails.push(...(cmd.details || []));
+      allCuisine.push(...getDetailsCuisine(cmd));
+      allBar.push(...getDetailsBar(cmd));
+    });
+    const refStr = refs.join(' · ');
+    const total = Number(commandes.reduce((s: number, c: any) => s + Number(c.montantTotal || 0), 0)).toFixed(2);
 
     const ligne = '<div style="border-top:1px dashed #000;margin:6px 0"></div>';
     const coupe = '<div style="text-align:center;padding:8px 0;font-size:10px;letter-spacing:8px">- - - - ✂ - - - -</div>';
 
     const blocTicket = (titre: string, items: any[], avecPrix: boolean, avecTotal: boolean, refCaisse?: boolean) => `
       <h3 style="text-align:center;font-size:13px;margin:4px 0">${titre}</h3>
-      <p style="text-align:center;font-size:9px;color:#555">${cmdRef} · ${dateStr}</p>
+      <p style="text-align:center;font-size:9px;color:#555">${refStr}</p>
       ${ligne}
       ${items.map(d => avecPrix
         ? `<div style="display:flex;justify-content:space-between;font-size:11px;padding:1px 0"><span>${d.quantite}x ${d.menu?.nom || 'Plat'}</span><span>${(Number(d.prix||0)*d.quantite).toFixed(2)} ${devise}</span></div>`
         : `<div style="font-size:11px;padding:1px 0">${d.quantite}x ${d.menu?.nom || 'Plat'}</div>`
       ).join('') || '<p style="text-align:center;color:#999;font-size:10px;font-style:italic">Aucun article</p>'}
       ${avecTotal ? `${ligne}<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:900;padding:2px 0"><span>TOTAL</span><span>${total} ${devise}</span></div>` : ''}
-      ${refCaisse ? `<p style="text-align:center;font-size:9px;font-weight:700;margin-top:4px">Réf: ${cmdRef}</p>` : ''}
+      ${refCaisse ? `<p style="text-align:center;font-size:9px;font-weight:700;margin-top:4px">Réf: ${refStr}</p>` : ''}
     `;
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Commande ${cmdRef}</title>
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Commande ${refStr}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family: 'Courier New', monospace; padding: 10px; max-width: 280px; margin: 0 auto; color: #000; font-size: 11px; }
@@ -291,13 +330,13 @@ export default function ReceptionPage() {
   <p style="text-align:center;font-size:9px;color:#555">Table: ${tableNumero} · Serveur: ${serveurNom}</p>
   ${ligne}
 
-  ${blocTicket('🍳 CUISINE', articlesCuisine, false, false)}
+  ${blocTicket('🍳 CUISINE', allCuisine, false, false)}
   ${coupe}
-  ${blocTicket('🍸 BAR', articlesBar, false, false)}
+  ${blocTicket('🍸 BAR', allBar, false, false)}
   ${coupe}
-  ${blocTicket('🧾 SERVEUR', articles, true, true)}
+  ${blocTicket('🧾 SERVEUR', allDetails, true, true)}
   ${coupe}
-  ${blocTicket('💰 CAISSE', articles, true, true, true)}
+  ${blocTicket('💰 CAISSE', allDetails, true, true, true)}
 
   ${ligne}
   <p style="text-align:center;font-size:9px;color:#aaa;margin-top:4px">RestoPro © ${new Date().getFullYear()}</p>
@@ -364,66 +403,105 @@ export default function ReceptionPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {currentData.map((cmd: any) => {
-            const isExpanded = expandedIds.has(cmd.id);
-            const serveurNom = getServeurNom(cmd.serveurId);
-            const isEnAttente = cmd.statut === 'EN_ATTENTE';
-            const isEmporter = cmd.typeCommande === 'A_EMPORTER' || cmd.table?.zone?.toUpperCase() === 'COMPTOIR' || cmd.table?.numero?.toUpperCase() === 'T00';
+          {currentData.map((item: any) => {
+            const isExpanded = expandedIds.has(item.tableId);
+            const serveurNom = getServeurNom(item.serveurId);
+            const isEnAttente = item.statut === 'EN_ATTENTE';
+            const isEmporter = item.typeCommande === 'A_EMPORTER';
+            const nbCmd = item.commandes?.length || 1;
 
             return (
-              <div key={cmd.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" style={{ borderLeft: `5px solid ${statutColor(cmd.statut)}` }}>
+              <div key={`table-${item.tableId}`} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" style={{ borderLeft: `5px solid ${statutColor(item.statut)}` }}>
                 {/* En-tête cliquable */}
-                <div className="flex items-center p-4 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => toggleExpand(cmd.id)}>
+                <div className="flex items-center p-4 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => toggleExpand(item.tableId)}>
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
                       <span className="font-bold text-gray-800">
-                        Table {getTableNumero(cmd.tableId)} · #{String(cmd.id).padStart(4, '0')}
+                        Table {item.tableNumero} · {nbCmd} commande{nbCmd > 1 ? 's' : ''}
                       </span>
-                      <span className="px-2 py-0.5 rounded-lg text-xs font-bold" style={{ backgroundColor: statutColor(cmd.statut) + '20', color: statutColor(cmd.statut) }}>
-                        {statutLabel(cmd.statut)}
+                      <span className="px-2 py-0.5 rounded-lg text-xs font-bold" style={{ backgroundColor: statutColor(item.statut) + '20', color: statutColor(item.statut) }}>
+                        {statutLabel(item.statut)}
                       </span>
                     </div>
                     <p className="text-xs text-gray-400 mt-1">
-                      {new Date(cmd.dateCommande).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                      {isEmporter ? ' · 🛍️ Comptoir' : serveurNom ? ` · 👤 ${serveurNom}` : ' · ⚠️ Sans serveur'}
+                      {nbCmd > 1 ? '🛒 Commandes groupées' : isEmporter ? '🛍️ Comptoir' : serveurNom ? `👤 ${serveurNom}` : '⚠️ Sans serveur'}
                     </p>
                   </div>
-                  <span className="font-bold text-gray-800 mr-3">{formatPrix(cmd.montantTotal)}</span>
-                  {/* Bouton imprimer pour les commandes validées/payées */}
+                  <span className="font-bold text-gray-800 mr-3">{formatPrix(item.montantTotal)}</span>
                   {!isEnAttente && (
-                    <button onClick={(e) => { e.stopPropagation(); imprimerTout(cmd); }}
-                      className="mr-2 px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
-                      title="Imprimer les tickets">
+                    <button onClick={(e) => { e.stopPropagation(); imprimerTout(item); }}
+                      className="mr-2 px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-semibold cursor-pointer transition-colors">
                       🖨
                     </button>
                   )}
                   <span className="text-gray-400 text-sm">{isExpanded ? '▲' : '▼'}</span>
                 </div>
 
-                {/* Détails (déplié) */}
+                {/* Détails (déplié) — une section par commande */}
                 {isExpanded && (
-                  <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/50">
-                    {(cmd.details || []).map((d: any) => (
-                      <div key={d.id} className="flex justify-between py-1 text-sm">
-                        <span className="text-gray-600">{d.quantite}x {d.menu?.nom || 'Plat'}</span>
-                        <span className="font-semibold text-gray-700">{formatPrix(Number(d.prix) * d.quantite)}</span>
+                  <div>
+                    {(item.commandes || []).map((cmd: any) => (
+                      <div key={cmd.id} className="border-t border-gray-100 px-4 py-3 bg-gray-50/50">
+                        <div className="flex justify-between items-center mb-2">
+                          <p className="text-xs text-gray-400">#{String(cmd.id).padStart(4, '0')} · {new Date(cmd.dateCommande).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
+                          <button onClick={(e) => { e.stopPropagation(); imprimerTout(cmd); }}
+                            className="px-2 py-0.5 bg-white border rounded text-xs cursor-pointer hover:bg-gray-100" title="Imprimer cette commande">
+                            🖨
+                          </button>
+                        </div>
+                        {(cmd.details || []).map((d: any) => (
+                          <div key={d.id} className="flex justify-between py-1 text-sm">
+                            <span className="text-gray-600">{d.quantite}x {d.menu?.nom || 'Plat'}</span>
+                            <span className="font-semibold text-gray-700">{formatPrix(Number(d.prix) * d.quantite)}</span>
+                          </div>
+                        ))}
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* Actions (EN_ATTENTE) */}
-                {isEnAttente && (
+                {/* Mode 2 (RECEPTION) : EN_ATTENTE → Valider */}
+                {!isModeServeur && isEnAttente && (
                   <div className="border-t border-gray-100 px-4 py-3 flex gap-3">
                     {!isEmporter && (
-                      <button onClick={() => { setAssignCmdId(cmd.id); setAssignServeurId(cmd.serveurId || (serveurs[0]?.id || 0)); setShowAssign(true); }}
+                      <button onClick={() => { const first = item.commandes?.[0]; setAssignCmdId(first?.id); setAssignServeurId(first?.serveurId || (serveurs[0]?.id || 0)); setShowAssign(true); }}
                         className="flex-1 py-2 rounded-xl text-sm font-semibold cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors">
-                        👤 {cmd.serveurId ? 'Changer serveur' : 'Assigner serveur'}
+                        👤 {item.serveurId ? 'Changer serveur' : 'Assigner serveur'}
                       </button>
                     )}
-                    <button onClick={() => handleValider(cmd)}
-                      className={`flex-1 py-2 rounded-xl text-sm font-bold cursor-pointer text-white transition-colors ${cmd.serveurId || isEmporter ? 'bg-green-500 hover:bg-green-600' : 'bg-green-300 cursor-not-allowed'}`}>
-                      ✅ Valider{isEmporter ? ' (comptoir)' : ''}
+                    <button onClick={() => { item.commandes.forEach((c: any) => handleValider(c)); }}
+                      className="flex-1 py-2 rounded-xl text-sm font-bold cursor-pointer text-white bg-green-500 hover:bg-green-600 transition-colors">
+                      ✅ Valider + 🖨
+                    </button>
+                  </div>
+                )}
+
+                {/* Mode 1 (SERVEUR) : VALIDEE/SERVEUR_VALIDE → 2 boutons */}
+                {isModeServeur && (item.statut === 'VALIDEE' || item.statut === 'SERVEUR_VALIDE') && (
+                  <div className="border-t border-gray-100 px-4 py-3 flex gap-3">
+                    <button onClick={() => { item.commandes.forEach((c: any) => handleValider(c)); }}
+                      className="flex-1 py-2 rounded-xl text-sm font-bold cursor-pointer text-white bg-green-500 hover:bg-green-600 transition-colors">
+                      ✅ Valider réception + 🖨
+                    </button>
+                    <button onClick={async () => {
+                      await commandesApi.notifierPret(item.commandes?.[0]?.id);
+                      toast.success('Serveur et client notifiés');
+                    }}
+                      className="flex-1 py-2 rounded-xl text-sm font-semibold cursor-pointer bg-amber-100 hover:bg-amber-200 text-amber-700 transition-colors">
+                      📢 Commande prête
+                    </button>
+                  </div>
+                )}
+
+                {/* Mode 1 (SERVEUR) : RECEPTION_VALIDE → bouton prêt seulement */}
+                {isModeServeur && item.statut === 'RECEPTION_VALIDE' && (
+                  <div className="border-t border-gray-100 px-4 py-3">
+                    <button onClick={async () => {
+                      await commandesApi.notifierPret(item.commandes?.[0]?.id);
+                      toast.success('Serveur et client notifiés');
+                    }}
+                      className="w-full py-2 rounded-xl text-sm font-semibold cursor-pointer bg-amber-100 hover:bg-amber-200 text-amber-700 transition-colors">
+                      📢 Commande prête
                     </button>
                   </div>
                 )}

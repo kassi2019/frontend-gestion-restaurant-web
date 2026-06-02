@@ -18,6 +18,8 @@ import ParametresPage from './pages/ParametresPage';
 import NotificationsPage from './pages/NotificationsPage';
 import AssignTablesPage from './pages/AssignTablesPage';
 import ReceptionPage from './pages/ReceptionPage';
+import ReservationsPage from './pages/ReservationsPage';
+import LivraisonsPage from './pages/LivraisonsPage';
 import { ToastProvider } from './services/toast';
 import { DialogProvider } from './services/dialog';
 
@@ -50,6 +52,8 @@ export default function App() {
             <Route path="/caisse" element={<CaissePage />} />
             <Route path="/assign-tables" element={<AssignTablesPage />} />
             <Route path="/reception" element={<ReceptionPage />} />
+            <Route path="/reservations" element={<ReservationsPage />} />
+            <Route path="/livraisons" element={<LivraisonsPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/stats" element={<StatsPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />

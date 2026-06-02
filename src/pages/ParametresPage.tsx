@@ -10,7 +10,7 @@ export default function ParametresPage() {
   const user = useSelector((s: RootState) => s.auth.user);
   const dispatch = useDispatch();
   const toast = useToast();
-  const [form, setForm] = useState({ nom: '', adresse: '', telephone: '', devise: '', logo: '' });
+  const [form, setForm] = useState({ nom: '', adresse: '', telephone: '', devise: '', logo: '', modeGestion: 'RECEPTION' });
   const [loading, setLoading] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -22,7 +22,7 @@ export default function ParametresPage() {
   useEffect(() => {
     if (user?.restaurantId) {
       restaurantApi.getInfo(user.restaurantId).then(({ data }) => {
-        setForm({ nom: data.nom || '', adresse: data.adresse || '', telephone: data.telephone || '', devise: data.devise || '', logo: data.logo || '' });
+        setForm({ nom: data.nom || '', adresse: data.adresse || '', telephone: data.telephone || '', devise: data.devise || '', logo: data.logo || '', modeGestion: data.modeGestion || 'RECEPTION' });
       }).catch(() => {});
     }
   }, [user?.restaurantId]);
@@ -142,6 +142,12 @@ export default function ParametresPage() {
 
         <label className="block text-sm font-semibold text-gray-600 mb-1.5">Devise</label>
         <input value={form.devise} onChange={e => setForm({...form, devise: e.target.value})} maxLength={10} placeholder="Ex: €, FC, $" className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-4" />
+
+        <label className="block text-sm font-semibold text-gray-600 mb-1.5">Mode de gestion des commandes</label>
+        <select value={form.modeGestion} onChange={e => setForm({...form, modeGestion: e.target.value})} className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-4">
+          <option value="RECEPTION">📋 Centralisé — La réception valide les commandes</option>
+          <option value="SERVEUR">👤 Serveur — Les serveurs valident leurs commandes</option>
+        </select>
 
         <button onClick={handleSave} disabled={loading}
           className="w-full py-3 bg-orange-500 text-white rounded-xl font-bold cursor-pointer hover:bg-orange-600 disabled:opacity-60 transition-colors">

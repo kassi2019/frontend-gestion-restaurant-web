@@ -58,6 +58,12 @@ export default function CommandesPage() {
   };
 
   // Charger au montage + écouter les événements socket pour recharger en temps réel
+  // Polling automatique (15 secondes)
+  useEffect(() => {
+    const interval = setInterval(() => { load(); }, 15000);
+    return () => clearInterval(interval);
+  }, [load]);
+
   useEffect(() => {
     load();
     const u1 = onNewCommande(() => load());

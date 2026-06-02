@@ -23,6 +23,8 @@ export default function TablesPage() {
     setLoading(true);
     try { const { data } = await tablesApi.getAll(); setTables(data || []); } catch {} finally { setLoading(false); }
   };
+  // Polling automatique (15 secondes)
+  useEffect(() => { const interval = setInterval(() => { load(); }, 15000); return () => clearInterval(interval); }, []);
   useEffect(() => { load(); }, []);
 
   const uniqueTables = useMemo(() => {

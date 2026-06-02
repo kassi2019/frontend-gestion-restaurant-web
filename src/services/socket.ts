@@ -57,9 +57,11 @@ export function disconnectSocket() {
 export function onNotification(callback: (data: any) => void) {
   socket?.on('notification_user', callback);
   socket?.on('notification_admin', callback);
+  socket?.on('commande_prete', callback);
   return () => {
     socket?.off('notification_user', callback);
     socket?.off('notification_admin', callback);
+    socket?.off('commande_prete', callback);
   };
 }
 

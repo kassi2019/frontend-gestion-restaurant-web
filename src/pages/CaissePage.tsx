@@ -9,6 +9,7 @@ import { onNewCommande, onCommandeStatusChange } from '../services/socket';
 
 export default function CaissePage() {
   const user = useSelector((s: RootState) => s.auth.user);
+  const token = useSelector((s: RootState) => s.auth.token);
   const toast = useToast();
   const dialog = useDialog();
   const [commandes, setCommandes] = useState<any[]>([]);
@@ -20,6 +21,9 @@ export default function CaissePage() {
   const [factures, setFactures] = useState<any[]>([]);
   const [clotures, setClotures] = useState<any[]>([]);
   const [searchCmd, setSearchCmd] = useState('');
+  const [expandedTables, setExpandedTables] = useState<Set<number>>(new Set());
+  const [showRemise, setShowRemise] = useState(false);
+  const [remiseForm, setRemiseForm] = useState({ type: 'POURCENTAGE', valeur: '', motif: '' });
 
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER' || user?.role === 'SUPER_ADMIN';
 
@@ -30,6 +34,12 @@ export default function CaissePage() {
     } catch {}
   }, []);
 
+  // Polling automatique (15 secondes)
+  useEffect(() => {
+    const interval = setInterval(() => { load(); }, 15000);
+    return () => clearInterval(interval);
+  }, [load]);
+
   useEffect(() => {
     load();
     const u1 = onNewCommande(() => load());
@@ -37,13 +47,56 @@ export default function CaissePage() {
     return () => { u1(); u2(); };
   }, [load]);
 
+  const payerTout = async (cmds: any[], modePaiement: string) => {
+    let ok = 0, fail = 0;
+    const factures: any[] = [];
+    for (const c of cmds) {
+      try {
+        const { data } = await paiementApi.payer(c.id, modePaiement);
+        if (data.facture?.id) factures.push(data.facture);
+        ok++;
+      } catch { fail++; }
+    }
+    if (fail === 0) toast.success(`${ok} commande(s) payée(s)`);
+    else toast.error(`${ok} payée(s), ${fail} échec(s)`);
+    load();
+    // Ouvrir les reçus
+    factures.forEach(f => {
+      window.open(`${API_URL}/api/paiements/factures/${f.id}/imprimer?token=${token || ''}`, '_blank');
+    });
+  };
+
+  const handlePayerToutClick = (cmds: any[]) => {
+    dialog.confirm({
+      title: `Payer ${cmds.length} commande(s) ?`,
+      message: `Total: ${format(cmds.reduce((s: number, c: any) => s + Number(c.montantTotal || 0), 0))} ${user?.devise || '€'}\n\nChoisir le mode de paiement :`,
+      confirmLabel: '💵 Espèces',
+      onConfirm: () => payerTout(cmds, 'ESPECES'),
+      // On utilise le dialog pour choisir - pour simplifier, on fait espèces par défaut
+      // L'utilisateur peut utiliser les boutons individuels pour choisir un autre mode
+    });
+  };
+
+  const handleRemise = async () => {
+    if (!selected) return;
+    const v = parseFloat(remiseForm.valeur);
+    if (isNaN(v) || v <= 0) { toast.error('Valeur invalide'); return; }
+    try {
+      const { data } = await paiementApi.appliquerRemise(selected.id, { type: remiseForm.type, valeur: v, motif: remiseForm.motif || undefined });
+      setSelected({ ...selected, montantTotal: parseFloat(data.montantFinal) });
+      setShowRemise(false);
+      toast.success(`Remise appliquée : ${data.montantFinal} ${user?.devise || '€'}`);
+      load();
+    } catch (err: any) { toast.error(err.response?.data?.message || 'Erreur'); }
+  };
+
   const handlePayer = async () => {
     if (!selected) return;
     try {
       const { data } = await paiementApi.payer(selected.id, mode);
       toast.success('Paiement effectué');
       if (data.facture?.id) {
-        window.open(`${API_URL}/api/paiements/factures/${data.facture.id}/imprimer`, '_blank');
+        window.open(`${API_URL}/api/paiements/factures/${data.facture.id}/imprimer?token=${token || ''}`, '_blank');
       }
       setSelected(null); load();
     } catch (err: any) { toast.error(err.response?.data?.message || 'Erreur paiement'); }
@@ -73,7 +126,42 @@ export default function CaissePage() {
   };
 
   const handleImprimerRecu = (factureId: number) => {
-    window.open(`${API_URL}/api/paiements/factures/${factureId}/imprimer`, '_blank');
+    window.open(`${API_URL}/api/paiements/factures/${factureId}/imprimer?token=${token || ''}`, '_blank');
+  };
+
+  const handleImprimerRecuParCmd = (cmd: any) => {
+    // Chercher une facture pour cette commande, sinon imprimer un ticket simple
+    const facture = factures.find((f: any) => f.commandeId === cmd.id);
+    if (facture) {
+      handleImprimerRecu(facture.id);
+    } else {
+      // Générer un ticket HTML simple
+      imprimerTicketCommande(cmd);
+    }
+  };
+
+  const handleImprimerRecuParTable = (g: any) => {
+    // Chercher les factures pour toutes les commandes de la table
+    const cmds = g.commandes;
+    const facturesTrouvees = factures.filter((f: any) => cmds.some((c: any) => c.id === f.commandeId));
+    facturesTrouvees.forEach((f: any) => handleImprimerRecu(f.id));
+    if (facturesTrouvees.length === 0 && cmds.length > 0) {
+      imprimerTicketCommande(cmds[0]);
+    }
+  };
+
+  const imprimerTicketCommande = (cmd: any) => {
+    const total = format(cmd.montantTotal);
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Commande CMD-${String(cmd.id).padStart(4, '0')}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Courier New',monospace;padding:20px;max-width:300px;margin:0 auto;color:#222}
+h1{font-size:16px;text-align:center}h2{font-size:12px;text-align:center;color:#888;margin:8px 0}.line{border-top:1px dashed #aaa;margin:12px 0}
+</style></head><body><h1>${user?.restaurantNom || 'RestoPro'}</h1><h2>Table ${cmd.table?.numero || '?'} · CMD-${String(cmd.id).padStart(4, '0')}</h2><div class="line"></div>
+${(cmd.details || []).map((d: any) => `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px"><span>${d.quantite}x ${d.menu?.nom || 'Plat'}</span><span>${(Number(d.prix||0)*d.quantite).toFixed(2)} ${user?.devise || '€'}</span></div>`).join('')}
+<div class="line"></div><div style="display:flex;justify-content:space-between;font-size:16px;font-weight:900"><span>TOTAL</span><span>${total} ${user?.devise || '€'}</span></div>
+<div style="text-align:center;margin-top:16px;font-size:10px;color:#aaa">RestoPro © ${new Date().getFullYear()}</div>
+<script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);}</script></body></html>`;
+    const w = window.open('', '_blank', 'width=400,height=600');
+    if (w) { w.document.write(html); w.document.close(); }
   };
 
   const format = (n: any) => parseFloat(n || 0).toFixed(2);
@@ -135,7 +223,7 @@ export default function CaissePage() {
         </div>
       )}
 
-      {/* Commandes à payer */}
+      {/* Commandes à payer — groupées par table */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
         <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
           <h3 className="font-bold text-gray-800">Commandes à payer ({commandesFiltrees.length})</h3>
@@ -143,16 +231,66 @@ export default function CaissePage() {
             placeholder="🔍 N° commande..."
             className="h-10 bg-white border rounded-xl px-3 text-sm w-36" />
         </div>
-        {commandesFiltrees.map(c => (
-          <div key={c.id} onClick={() => setSelected(c)}
-            className="flex items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg">
-            <div>
-              <p className="font-bold text-sm">Table {c.table?.numero || '—'} · #{c.id} {c.typeCommande === 'A_EMPORTER' ? '🥡' : '🍽️'}</p>
-              <p className="text-xs text-gray-400">{c.statutPaiement} · {new Date(c.dateCommande).toLocaleTimeString('fr-FR')}</p>
+        {(() => {
+          // Grouper par table
+          const groupes: Record<number, any> = {};
+          commandesFiltrees.forEach(c => {
+            const tid = c.tableId;
+            if (!groupes[tid]) groupes[tid] = { tableId: tid, tableNumero: c.table?.numero || '?', commandes: [], montantTotal: 0 };
+            groupes[tid].commandes.push(c);
+            groupes[tid].montantTotal += Number(c.montantTotal || 0);
+          });
+          return Object.values(groupes).map((g: any) => {
+            const isExpanded = expandedTables.has(g.tableId);
+            const nbCmd = g.commandes.length;
+            return (
+            <div key={`t${g.tableId}`}>
+              <div className="flex items-center justify-between py-3 border-b border-gray-100 hover:bg-gray-50 px-2 rounded-lg">
+                <div onClick={() => { if (nbCmd === 1) setSelected(g.commandes[0]); else setExpandedTables(prev => { const n = new Set(prev); if (n.has(g.tableId)) n.delete(g.tableId); else n.add(g.tableId); return n; }); }}
+                  className="flex items-center justify-between flex-1 cursor-pointer">
+                  <div>
+                    <p className="font-bold text-sm">🪑 Table {g.tableNumero} · {nbCmd} cmd{nbCmd > 1 ? 's' : ''} {g.commandes[0]?.typeCommande === 'A_EMPORTER' ? '🥡' : '🍽️'}</p>
+                    <p className="text-xs font-bold text-orange-500">
+                      {g.commandes.map((c: any) => 'CMD-' + String(c.id).padStart(4, '0')).join(' · ')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <p className="font-extrabold text-lg">{format(g.montantTotal)} {user?.devise || '€'}</p>
+                    {nbCmd > 1 && <span className="text-gray-400 text-base">{isExpanded ? '▲' : '▼'}</span>}
+                    {nbCmd === 1 && <span className="text-gray-300 text-sm">▶</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 ml-3">
+                  <button onClick={(e) => { e.stopPropagation(); handleImprimerRecuParTable(g); }}
+                    className="px-2 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs cursor-pointer" title="Imprimer le reçu">
+                    🖨
+                  </button>
+                  {nbCmd > 1 && (
+                    <button onClick={(e) => { e.stopPropagation(); handlePayerToutClick(g.commandes); }}
+                      className="px-3 py-1.5 bg-green-500 text-white rounded-xl text-xs font-bold cursor-pointer hover:bg-green-600 transition-colors"
+                      title="Payer toutes les commandes">
+                      💰 Tout payer
+                    </button>
+                  )}
+                </div>
+              </div>
+              {isExpanded && g.commandes.map((c: any) => (
+                <div key={c.id} onClick={() => setSelected(c)}
+                  className="flex items-center justify-between py-2 pl-4 border-b border-gray-50 cursor-pointer hover:bg-orange-50 ml-6 px-2 rounded">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700">CMD-{String(c.id).padStart(4, '0')} · {c.statut}</p>
+                    <p className="text-xs text-gray-400">{new Date(c.dateCommande).toLocaleTimeString('fr-FR')}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold">{format(c.montantTotal)} {user?.devise || '€'}</p>
+                    <button onClick={(e) => { e.stopPropagation(); handleImprimerRecuParCmd(c); }}
+                      className="px-2 py-0.5 text-xs bg-gray-100 hover:bg-gray-200 rounded cursor-pointer">🖨</button>
+                  </div>
+                </div>
+              ))}
             </div>
-            <p className="font-extrabold text-lg">{format(c.montantTotal)} {user?.devise || '€'}</p>
-          </div>
-        ))}
+          )});
+        })()}
         {commandesFiltrees.length === 0 && <p className="text-center text-gray-400 py-6">Aucune commande à payer</p>}
       </div>
 
@@ -161,6 +299,10 @@ export default function CaissePage() {
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm animate-slideUp" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-2">Paiement #{selected.id}</h3>
             <p className="text-3xl font-extrabold text-orange-500 mb-4">{format(selected.montantTotal)} {user?.devise || '€'}</p>
+            <button onClick={() => { setShowRemise(true); }}
+              className="w-full py-2 bg-amber-100 text-amber-700 rounded-xl font-semibold text-sm cursor-pointer hover:bg-amber-200 mb-3 transition-colors">
+              🏷️ Appliquer une remise
+            </button>
             <div className="flex gap-2 mb-4">
               {['ESPECES', 'MOBILE_MONEY', 'CARTE_BANCAIRE'].map(m => (
                 <button key={m} onClick={() => setMode(m)}
@@ -171,6 +313,37 @@ export default function CaissePage() {
             </div>
             <button onClick={handlePayer} className="w-full py-3 bg-green-500 text-white rounded-xl font-bold cursor-pointer hover:bg-green-600">✅ Payer</button>
             <button onClick={() => setSelected(null)} className="w-full mt-3 py-2 text-gray-400 cursor-pointer">Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Remise */}
+      {showRemise && selected && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowRemise(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm animate-slideUp" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-2">🏷️ Appliquer une remise</h3>
+            <p className="text-sm text-gray-400 mb-4">Commande #{selected.id} · {format(selected.montantTotal)} {user?.devise || '€'}</p>
+            <div className="flex gap-2 mb-4">
+              <button onClick={() => setRemiseForm({...remiseForm, type: 'POURCENTAGE'})}
+                className={`flex-1 py-2 rounded-xl text-sm font-semibold cursor-pointer ${remiseForm.type === 'POURCENTAGE' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                % Pourcentage
+              </button>
+              <button onClick={() => setRemiseForm({...remiseForm, type: 'MONTANT'})}
+                className={`flex-1 py-2 rounded-xl text-sm font-semibold cursor-pointer ${remiseForm.type === 'MONTANT' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                {user?.devise || '€'} Montant
+              </button>
+            </div>
+            <div className="flex gap-2 mb-4">
+              <input type="number" value={remiseForm.valeur} onChange={e => setRemiseForm({...remiseForm, valeur: e.target.value})}
+                placeholder={remiseForm.type === 'POURCENTAGE' ? 'Ex: 10' : 'Ex: 5000'} className="flex-1 h-11 bg-gray-50 border rounded-xl px-4" />
+              <input value={remiseForm.motif} onChange={e => setRemiseForm({...remiseForm, motif: e.target.value})}
+                placeholder="Motif (optionnel)" className="flex-[2] h-11 bg-gray-50 border rounded-xl px-4" />
+            </div>
+            <button onClick={handleRemise}
+              className="w-full py-3 bg-amber-500 text-white rounded-xl font-bold cursor-pointer hover:bg-amber-600 transition-colors">
+              🏷️ Appliquer la remise
+            </button>
+            <button onClick={() => setShowRemise(false)} className="w-full mt-3 py-2 text-gray-400 cursor-pointer">Annuler</button>
           </div>
         </div>
       )}
