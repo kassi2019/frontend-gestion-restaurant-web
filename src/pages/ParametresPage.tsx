@@ -1,16 +1,80 @@
 import { useEffect, useState, useRef } from 'react';
-import { restaurantApi, authApi } from '../services/api';
+import { restaurantApi, authApi, zonesApi } from '../services/api';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState } from '../store';
 import { updateUser } from '../store/authSlice';
 import { API_URL } from '../config';
 import { useToast } from '../services/toast';
 
+function ZonesManager() {
+  const [zones, setZones] = useState<any[]>([]);
+  const [showZoneForm, setShowZoneForm] = useState(false);
+  const [editingZone, setEditingZone] = useState<any>(null);
+  const [zoneForm, setZoneForm] = useState({ nom: '', coefficient: '1.0' });
+  const toast = useToast();
+
+  const loadZones = () => {
+    zonesApi.getAll().then(r => setZones(r.data || [])).catch(() => {});
+  };
+  useEffect(() => { loadZones(); }, []);
+
+  const handleSaveZone = async () => {
+    if (!zoneForm.nom) { toast.error('Nom requis'); return; }
+    const c = parseFloat(zoneForm.coefficient) || 1.0;
+    try {
+      if (editingZone) { await zonesApi.update(editingZone.id, { nom: zoneForm.nom, coefficient: c }); toast.success('Zone modifiée'); }
+      else { await zonesApi.create({ nom: zoneForm.nom, coefficient: c }); toast.success('Zone créée'); }
+      setShowZoneForm(false); setEditingZone(null); setZoneForm({ nom: '', coefficient: '1.0' }); loadZones();
+    } catch { toast.error('Erreur'); }
+  };
+
+  const handleDeleteZone = async (id: number) => { if (confirm('Supprimer cette zone ?')) { await zonesApi.delete(id); loadZones(); } };
+
+  return (
+    <div>
+      <label className="block text-sm font-semibold text-gray-600 mb-1.5">🏷️ Zones tarifaires</label>
+      <div className="bg-gray-50 rounded-xl p-4 mb-4">
+        {zones.map(zone => (
+          <div key={zone.id} className="flex items-center justify-between py-2 border-b border-gray-200 last:border-0">
+            <div className="flex items-center gap-3">
+              <span className="font-semibold text-gray-700">{zone.nom}</span>
+              <span className="text-sm bg-white px-2 py-0.5 rounded-full border">x{Number(zone.coefficient).toFixed(1)}</span>
+              <span className="text-xs text-gray-400">({zone.tables?.length || 0} tables)</span>
+            </div>
+            <div className="flex gap-1">
+              <button onClick={() => { setEditingZone(zone); setZoneForm({ nom: zone.nom, coefficient: String(zone.coefficient) }); setShowZoneForm(true); }}
+                className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg cursor-pointer">✏️</button>
+              <button onClick={() => handleDeleteZone(zone.id)} className="px-2 py-1 text-xs bg-red-50 hover:bg-red-100 text-red-500 rounded-lg cursor-pointer">🗑</button>
+            </div>
+          </div>
+        ))}
+        {zones.length === 0 && <p className="text-xs text-gray-400 py-2">Aucune zone. Créez des zones (ex: VIP, VVIP) et assignez-leur des tables.</p>}
+        <button onClick={() => { setEditingZone(null); setZoneForm({ nom: '', coefficient: '1.0' }); setShowZoneForm(true); }}
+          className="mt-3 px-4 py-2 bg-orange-100 text-orange-600 rounded-xl text-sm font-semibold cursor-pointer hover:bg-orange-200">+ Ajouter une zone</button>
+      </div>
+      {showZoneForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowZoneForm(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm animate-slideUp" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-4">{editingZone ? 'Modifier' : 'Nouvelle'} zone</h3>
+            <input value={zoneForm.nom} onChange={e => setZoneForm({...zoneForm, nom: e.target.value})} placeholder="Nom (ex: VIP)" className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-3" />
+            <label className="block text-sm font-semibold text-gray-600 mb-1">Coefficient</label>
+            <input type="number" step="0.1" min="0.5" max="5" value={zoneForm.coefficient} onChange={e => setZoneForm({...zoneForm, coefficient: e.target.value})}
+              className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-4" />
+            <p className="text-xs text-gray-400 mb-3">1.0 = prix normal · 1.2 = +20% · 1.5 = +50%</p>
+            <button onClick={handleSaveZone} className="w-full py-2.5 bg-orange-500 text-white rounded-xl font-bold cursor-pointer hover:bg-orange-600">Enregistrer</button>
+            <button onClick={() => setShowZoneForm(false)} className="w-full mt-3 py-2 text-gray-400 cursor-pointer">Annuler</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ParametresPage() {
   const user = useSelector((s: RootState) => s.auth.user);
   const dispatch = useDispatch();
   const toast = useToast();
-  const [form, setForm] = useState({ nom: '', adresse: '', telephone: '', devise: '', logo: '', modeGestion: 'RECEPTION' });
+  const [form, setForm] = useState({ nom: '', adresse: '', telephone: '', devise: '', logo: '', modeGestion: 'RECEPTION', zonesTarifaires: '{}' });
   const [loading, setLoading] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -22,7 +86,7 @@ export default function ParametresPage() {
   useEffect(() => {
     if (user?.restaurantId) {
       restaurantApi.getInfo(user.restaurantId).then(({ data }) => {
-        setForm({ nom: data.nom || '', adresse: data.adresse || '', telephone: data.telephone || '', devise: data.devise || '', logo: data.logo || '', modeGestion: data.modeGestion || 'RECEPTION' });
+        setForm({ nom: data.nom || '', adresse: data.adresse || '', telephone: data.telephone || '', devise: data.devise || '', logo: data.logo || '', modeGestion: data.modeGestion || 'RECEPTION', zonesTarifaires: data.zonesTarifaires || '{}' });
       }).catch(() => {});
     }
   }, [user?.restaurantId]);
@@ -148,6 +212,9 @@ export default function ParametresPage() {
           <option value="RECEPTION">📋 Centralisé — La réception valide les commandes</option>
           <option value="SERVEUR">👤 Serveur — Les serveurs valident leurs commandes</option>
         </select>
+
+        <ZonesManager />
+
 
         <button onClick={handleSave} disabled={loading}
           className="w-full py-3 bg-orange-500 text-white rounded-xl font-bold cursor-pointer hover:bg-orange-600 disabled:opacity-60 transition-colors">

@@ -138,6 +138,15 @@ export const reservationsApi = {
   annuler: (id: number) => api.post(`/reservations/${id}/annuler`),
 };
 
+export const zonesApi = {
+  getAll: () => api.get('/zones'),
+  create: (data: { nom: string; coefficient: number }) => api.post('/zones', data),
+  update: (id: number, data: { nom?: string; coefficient?: number }) => api.patch(`/zones/${id}`, data),
+  delete: (id: number) => api.delete(`/zones/${id}`),
+  assignTable: (zoneId: number, tableId: number) => api.post(`/zones/${zoneId}/assign-table`, { tableId }),
+  unassignTable: (zoneId: number, tableId: number) => api.post(`/zones/${zoneId}/unassign-table`, { tableId }),
+};
+
 export const restaurantApi = {
   getInfo: (id: number) => api.get(`/restaurants/${id}`),
   update: (id: number, data: any) => api.patch(`/restaurants/${id}`, data),
