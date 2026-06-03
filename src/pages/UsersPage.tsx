@@ -15,7 +15,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({ nom: '', telephone: '', mot_de_passe: '123456', role: 'SERVEUR' });
+  const [form, setForm] = useState({ nom: '', telephone: '', mot_de_passe: '123456', role: 'SERVEUR', joursRepos: '' });
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -25,14 +25,14 @@ export default function UsersPage() {
   };
   useEffect(() => { load(); }, []);
 
-  const resetForm = () => { setForm({ nom: '', telephone: '', mot_de_passe: '123456', role: 'SERVEUR' }); setSelectedImage(null); setEditing(null); };
+  const resetForm = () => { setForm({ nom: '', telephone: '', mot_de_passe: '123456', role: 'SERVEUR', joursRepos: '' }); setSelectedImage(null); setEditing(null); };
 
   const handleSave = async () => {
     if (!form.nom || !form.telephone) { toast.error('Nom et téléphone requis'); return; }
     setSaving(true);
     try {
       if (editing) {
-        await usersApi.update(editing.id, { nom: form.nom, role: form.role });
+        await usersApi.update(editing.id, { nom: form.nom, role: form.role, joursRepos: form.joursRepos });
         if (selectedImage) {
           const fd = new FormData(); fd.append('image', selectedImage); await authApi.uploadPhoto(fd);
         }
@@ -57,7 +57,7 @@ export default function UsersPage() {
   };
 
   const openEdit = (u: any) => {
-    setEditing(u); setForm({ nom: u.nom, telephone: u.telephone, mot_de_passe: '', role: u.role }); setShowForm(true);
+    setEditing(u); setForm({ nom: u.nom, telephone: u.telephone, mot_de_passe: '', role: u.role, joursRepos: u.joursRepos || '' }); setShowForm(true);
   };
 
   const roleColor = (r: string) => r === 'ADMIN' ? 'text-purple-600 bg-purple-50' : r === 'SUPER_ADMIN' ? 'text-red-600 bg-red-50' : 'text-gray-600 bg-gray-100';
@@ -149,7 +149,7 @@ export default function UsersPage() {
 
             <label className="block text-sm font-semibold text-gray-600 mb-1.5">Rôle</label>
             <select value={form.role} onChange={e => setForm({...form, role: e.target.value})} className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-4">
-              <option>SERVEUR</option><option>CUISINE</option><option>BAR</option><option>CAISSIER</option><option>RECEPTIONNISTE</option><option>MANAGER</option><option>ADMIN</option>
+              <option>SERVEUR</option><option>CUISINE</option><option>BAR</option><option>CAISSIER</option><option>RECEPTIONNISTE</option><option>LIVREUR</option><option>MANAGER</option><option>ADMIN</option>
             </select>
 
             <button onClick={handleSave} disabled={saving}

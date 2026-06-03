@@ -19,7 +19,8 @@ export default function PlanningPage() {
   const [filterEmploye, setFilterEmploye] = useState('TOUS');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({ jour: new Date().toISOString().slice(0, 10), heureDebut: '08:00', heureFin: '18:00', utilisateurId: '', statut: 'ACTIF' });
+  const [form, setForm] = useState({ jour: new Date().toISOString().slice(0, 10), dateFin: '', heureDebut: '08:00', heureFin: '18:00', utilisateurId: '', statut: 'ACTIF' });
+  const [joursChecked, setJoursChecked] = useState([1,2,3,4,5,6,0]); // Lun..Dim tous cochés
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -58,7 +59,8 @@ export default function PlanningPage() {
   }, [todayPlannings, filterStatut, filterEmploye]);
 
   const resetForm = () => {
-    setForm({ jour: selectedDate, heureDebut: '08:00', heureFin: '18:00', utilisateurId: '', statut: 'ACTIF' });
+    setForm({ jour: selectedDate, dateFin: '', heureDebut: '08:00', heureFin: '18:00', utilisateurId: '', statut: 'ACTIF' });
+    setJoursChecked([1,2,3,4,5,6,0]);
     setEditing(null);
   };
 
@@ -85,6 +87,36 @@ export default function PlanningPage() {
       setShowForm(false); resetForm(); load();
     } catch (err: any) { toast.error(err.response?.data?.message || 'Erreur'); }
     finally { setSaving(false); }
+  };
+
+  const JOURS_NOMS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+
+  const handleCreerTout = async () => {
+    if (!form.jour || !form.dateFin || !form.utilisateurId) { toast.error('Dates et employé requis'); return; }
+    const debut = new Date(form.jour + 'T00:00:00');
+    const fin = new Date(form.dateFin + 'T00:00:00');
+    if (fin < debut) { toast.error('Date fin < date début'); return; }
+    // Sauvegarder les jours de repos dans le profil
+    const repos = [0,1,2,3,4,5,6].filter(d => !joursChecked.includes(d)).join(',');
+    try { await usersApi.update(parseInt(form.utilisateurId), { joursRepos: repos } as any); } catch {}
+    let ok = 0;
+    const current = new Date(debut);
+    while (current <= fin) {
+      const js = current.getDay();
+      if (joursChecked.includes(js)) {
+        try {
+          await planningApi.create({
+            utilisateurId: parseInt(form.utilisateurId),
+            jour: current.toISOString().slice(0, 10) + 'T00:00:00.000Z',
+            heureDebut: form.heureDebut, heureFin: form.heureFin, statut: form.statut,
+          });
+          ok++;
+        } catch {}
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    toast.success(`${ok} planning(s) créé(s)`);
+    setShowForm(false); load();
   };
 
   const handleDelete = async (id: number) => {
@@ -117,12 +149,18 @@ export default function PlanningPage() {
           <h1 className="text-2xl font-extrabold text-gray-800">📅 Planning</h1>
           <p className="text-gray-400 text-sm">{plannings.length} programme(s) · {todayPlannings.length} aujourd'hui</p>
         </div>
-        {isAdmin && (
-          <button onClick={() => { resetForm(); setShowForm(true); }}
-            className="bg-orange-500 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-orange-600 cursor-pointer shadow-sm">
-            + Ajouter
+        <div className="flex gap-2">
+          <button onClick={() => window.print()}
+            className="bg-gray-100 text-gray-600 px-4 py-2.5 rounded-xl font-semibold hover:bg-gray-200 cursor-pointer text-sm">
+            🖨 Imprimer
           </button>
-        )}
+          {isAdmin && (
+            <button onClick={() => { resetForm(); setShowForm(true); }}
+              className="bg-orange-500 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-orange-600 cursor-pointer shadow-sm">
+              + Ajouter
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Stats cards */}
@@ -239,7 +277,7 @@ export default function PlanningPage() {
                 {/* Actions (admin seulement) */}
                 {isAdmin && (
                 <div className="flex gap-2 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => { setEditing(p); setForm({ jour: selectedDate, heureDebut: formatTime(p.heureDebut), heureFin: formatTime(p.heureFin), utilisateurId: String(p.utilisateurId), statut: p.statut || 'ACTIF' }); setShowForm(true); }}
+                  <button onClick={() => { setEditing(p); setForm({ jour: selectedDate, dateFin: '', heureDebut: formatTime(p.heureDebut), heureFin: formatTime(p.heureFin), utilisateurId: String(p.utilisateurId), statut: p.statut || 'ACTIF' }); setShowForm(true); }}
                     className="flex-1 py-1.5 text-xs rounded-lg bg-gray-100 hover:bg-gray-200 font-semibold cursor-pointer">✏️ Modifier</button>
                   <button onClick={() => handleDelete(p.id)}
                     className="py-1.5 px-3 text-xs rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-semibold cursor-pointer">🗑</button>
@@ -257,9 +295,23 @@ export default function PlanningPage() {
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm animate-slideUp" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">{editing ? '✏️ Modifier le planning' : '+ Nouveau planning'}</h3>
 
-            <label className="block text-sm font-semibold text-gray-600 mb-1.5">Date</label>
+            <label className="block text-sm font-semibold text-gray-600 mb-1.5">Date début</label>
             <input type="date" value={form.jour} onChange={e => setForm({...form, jour: e.target.value})}
               className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-3" />
+
+            <label className="block text-sm font-semibold text-gray-600 mb-1.5">Date fin (intervalle)</label>
+            <input type="date" value={form.dateFin} onChange={e => setForm({...form, dateFin: e.target.value})}
+              className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-3" />
+
+            <label className="block text-sm font-semibold text-gray-600 mb-1.5">Jours travaillés</label>
+            <div className="flex gap-2 mb-3 flex-wrap">
+              {JOURS_NOMS.map((nom, idx) => (
+                <button key={idx} type="button" onClick={() => setJoursChecked(prev => prev.includes(idx) ? prev.filter(d => d !== idx) : [...prev, idx])}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer ${joursChecked.includes(idx) ? 'bg-blue-100 text-blue-700 border border-blue-300' : 'bg-red-100 text-red-500 border border-red-200'}`}>
+                  {nom}
+                </button>
+              ))}
+            </div>
 
             <div className="flex gap-2 mb-3">
               <div className="flex-1">
@@ -289,11 +341,19 @@ export default function PlanningPage() {
               <option value="CONGE">🏖️ Congé</option>
             </select>
 
-            <button onClick={handleSave} disabled={saving}
-              className="w-full py-2.5 bg-orange-500 text-white rounded-xl font-bold cursor-pointer hover:bg-orange-600 disabled:opacity-60 flex items-center justify-center gap-2">
-              {saving && <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />}
-              {editing ? 'Enregistrer' : 'Ajouter'}
-            </button>
+            <div className="flex gap-2">
+              <button onClick={handleSave} disabled={saving}
+                className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl font-bold cursor-pointer hover:bg-orange-600 disabled:opacity-60 flex items-center justify-center gap-2">
+                {saving && <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />}
+                {editing ? 'Enregistrer' : 'Ajouter'}
+              </button>
+              {!editing && (
+                <button onClick={handleCreerTout}
+                  className="flex-1 py-2.5 bg-purple-500 text-white rounded-xl font-bold cursor-pointer hover:bg-purple-600">
+                  📆 Créer tout
+                </button>
+              )}
+            </div>
             <button onClick={() => { setShowForm(false); resetForm(); }} className="w-full mt-3 py-2 text-gray-400 cursor-pointer">Annuler</button>
           </div>
         </div>
