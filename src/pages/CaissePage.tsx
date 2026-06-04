@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { paiementApi } from '../services/api';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { paiementApi, menuApi, tablesApi, commandesApi } from '../services/api';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../store';
 import { useToast } from '../services/toast';
@@ -24,6 +24,23 @@ export default function CaissePage() {
   const [expandedTables, setExpandedTables] = useState<Set<number>>(new Set());
   const [showRemise, setShowRemise] = useState(false);
   const [remiseForm, setRemiseForm] = useState({ type: 'POURCENTAGE', valeur: '', motif: '' });
+
+  // Mode 3 CAISSE directe
+  const [showDirectCmd, setShowDirectCmd] = useState(false);
+  const [menus, setMenus] = useState<any[]>([]);
+  const [cart, setCart] = useState<{ menuId: number; nom: string; prix: number; quantite: number }[]>([]);
+  const [tableId, setTableId] = useState(0);
+  const [tables, setTablesState] = useState<any[]>([]);
+  const [payMode, setPayMode] = useState('ESPECES');
+  const [savingDirect, setSavingDirect] = useState(false);
+  const [searchMenu, setSearchMenu] = useState('');
+
+  // Coefficient de zone pour la table sélectionnée
+  const tableCoef = useMemo(() => {
+    if (!tableId) return 1.0;
+    const t = tables.find((tb: any) => tb.id === tableId);
+    return t?.zoneTarif ? Number(t.zoneTarif.coefficient) : 1.0;
+  }, [tableId, tables]);
 
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER' || user?.role === 'SUPER_ADMIN';
 
@@ -63,6 +80,36 @@ export default function CaissePage() {
     // Ouvrir les reçus
     factures.forEach(f => {
       window.open(`${API_URL}/api/paiements/factures/${f.id}/imprimer?token=${token || ''}`, '_blank');
+    });
+  };
+
+  // Mode 3 : ouvrir la commande directe
+  const openDirectCmd = async () => {
+    try {
+      const [mRes, tRes] = await Promise.all([menuApi.getMenus(), tablesApi.getAll()]);
+      setMenus(mRes.data || []); setTablesState(tRes.data || []);
+    } catch {}
+    setCart([]); setTableId(0); setPayMode('ESPECES'); setShowDirectCmd(true);
+  };
+
+  const handleDirectPay = async () => {
+    if (!tableId) { toast.error('Sélectionnez une table'); return; }
+    if (cart.length === 0) { toast.error('Ajoutez des articles'); return; }
+    setSavingDirect(true);
+    try {
+      const { data } = await commandesApi.createAndPay({ tableId, details: cart.map(c => ({ menuId: c.menuId, quantite: c.quantite })), modePaiement: payMode });
+      toast.success('Payé ! Reçu imprimé');
+      if (data.facture?.id) window.open(`${API_URL}/api/paiements/factures/${data.facture.id}/imprimer?token=${token}`, '_blank');
+      setShowDirectCmd(false); load();
+    } catch (err: any) { toast.error('Erreur paiement'); }
+    finally { setSavingDirect(false); }
+  };
+
+  const addToCart = (m: any) => {
+    setCart(prev => {
+      const found = prev.find(c => c.menuId === m.id);
+      if (found) return prev.map(c => c.menuId === m.id ? { ...c, quantite: c.quantite + 1 } : c);
+      return [...prev, { menuId: m.id, nom: m.nom, prix: parseFloat(m.prix), quantite: 1 }];
     });
   };
 
@@ -185,7 +232,7 @@ ${(cmd.details || []).map((d: any) => `<div style="display:flex;justify-content:
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex items-center gap-2 mb-6 flex-wrap">
         <button onClick={() => setTab('paiement')}
           className={`px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer ${tab === 'paiement' ? 'bg-orange-500 text-white' : 'bg-white border text-gray-600'}`}>💰 Paiements</button>
         <button onClick={() => { setTab('factures'); loadFactures(); }}
@@ -193,6 +240,11 @@ ${(cmd.details || []).map((d: any) => `<div style="display:flex;justify-content:
         {isAdmin && (
           <button onClick={() => { setTab('clotures'); loadClotures(); }}
             className={`px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer ${tab === 'clotures' ? 'bg-orange-500 text-white' : 'bg-white border text-gray-600'}`}>📋 Clôtures</button>
+        )}
+        {(user as any)?.modeGestion === 'CAISSE' && (
+          <button onClick={openDirectCmd} className="px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer bg-green-500 text-white hover:bg-green-600">
+            🛒 Nouvelle commande
+          </button>
         )}
       </div>
 
@@ -344,6 +396,67 @@ ${(cmd.details || []).map((d: any) => `<div style="display:flex;justify-content:
               🏷️ Appliquer la remise
             </button>
             <button onClick={() => setShowRemise(false)} className="w-full mt-3 py-2 text-gray-400 cursor-pointer">Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {/* MODE 3 : Commande directe caisse */}
+      {showDirectCmd && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowDirectCmd(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto animate-slideUp" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-4">🛒 Nouvelle commande (caisse)</h3>
+            <select value={tableId} onChange={e => setTableId(parseInt(e.target.value))} className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-4">
+              <option value={0}>Sélectionner une table...</option>
+              {tables.map((t: any) => <option key={t.id} value={t.id}>{t.numero} ({t.zoneTarif?.nom || t.zone || 'Standard'})</option>)}
+            </select>
+
+            {/* Recherche menu */}
+            <input value={searchMenu} onChange={e => setSearchMenu(e.target.value)}
+              placeholder="🔍 Rechercher un plat..." className="w-full h-10 bg-gray-50 border rounded-xl px-4 mb-3 text-sm" />
+
+            {/* Plats filtrés (prix > 0) */}
+            <div className="space-y-1 mb-4 max-h-48 overflow-y-auto">
+              {menus.filter(m => m.disponibilite !== false && m.disponibleDemain !== 1 && parseFloat(m.prix) > 0 && (!searchMenu || m.nom.toLowerCase().includes(searchMenu.toLowerCase()))).map((m: any) => {
+                const prixAdjuste = parseFloat(m.prix) * tableCoef;
+                return (
+                <div key={m.id} onClick={() => addToCart({...m, prix: prixAdjuste})} className="flex justify-between items-center py-2 px-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-orange-50">
+                  <span className="text-sm font-semibold">{m.nom}</span>
+                  <span className="text-sm font-bold text-orange-500">{prixAdjuste.toFixed(2)} {user?.devise || '€'}</span>
+                  <span className="text-xs bg-orange-500 text-white w-6 h-6 rounded-full flex items-center justify-center font-bold">+</span>
+                </div>
+              )})}
+            </div>
+
+            {/* Panier */}
+            <div className="bg-gray-50 rounded-xl p-3 mb-4">
+              <h4 className="font-bold text-sm mb-2">🛒 Panier ({cart.length})</h4>
+              {cart.map((c, i) => (
+                <div key={i} className="flex justify-between items-center text-sm py-1">
+                  <span>{c.quantite}x {c.nom}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{(c.prix * c.quantite).toFixed(2)} {user?.devise || '€'}</span>
+                    <button onClick={() => setCart(prev => prev.filter((_, idx) => idx !== i))}
+                      className="text-red-400 hover:text-red-600 font-bold text-xs">✕</button>
+                  </div>
+                </div>
+              ))}
+              <div className="border-t mt-2 pt-2 flex justify-between font-extrabold">
+                <span>TOTAL</span>
+                <span className="text-lg text-orange-500">{cart.reduce((s, c) => s + c.prix * c.quantite, 0).toFixed(2)} {user?.devise || '€'}</span>
+              </div>
+            </div>
+
+            <select value={payMode} onChange={e => setPayMode(e.target.value)} className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-4">
+              <option value="ESPECES">💵 Espèces</option>
+              <option value="MOBILE_MONEY">📱 Mobile Money</option>
+              <option value="CARTE_BANCAIRE">💳 Carte Bancaire</option>
+            </select>
+
+            <button onClick={handleDirectPay} disabled={savingDirect}
+              className="w-full py-3 bg-green-500 text-white rounded-xl font-bold cursor-pointer hover:bg-green-600 disabled:opacity-60">
+              {savingDirect ? 'Paiement...' : '💰 Payer et imprimer le reçu'}
+            </button>
+            <button onClick={() => setShowDirectCmd(false)} className="w-full mt-3 py-2 text-gray-400 cursor-pointer">Annuler</button>
           </div>
         </div>
       )}

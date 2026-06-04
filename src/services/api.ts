@@ -76,6 +76,7 @@ export const tablesApi = {
 
 export const commandesApi = {
   getAll: () => api.get('/commandes'),
+  createAndPay: (data: { tableId: number; details: { menuId: number; quantite: number }[]; modePaiement: string }) => api.post('/commandes/caisse-directe', data),
   create: (data: any) => api.post('/commandes', data),
   getByTable: (tableId: number) => api.get(`/commandes/table/${tableId}`),
   getByServeur: () => api.get('/commandes/serveur'),

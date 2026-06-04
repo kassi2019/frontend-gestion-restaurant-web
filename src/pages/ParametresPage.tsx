@@ -211,6 +211,7 @@ export default function ParametresPage() {
         <select value={form.modeGestion} onChange={e => setForm({...form, modeGestion: e.target.value})} className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-4">
           <option value="RECEPTION">📋 Centralisé — La réception valide les commandes</option>
           <option value="SERVEUR">👤 Serveur — Les serveurs valident leurs commandes</option>
+          <option value="CAISSE">🏪 Caisse directe — La caisse saisit et encaisse directement</option>
         </select>
 
         <ZonesManager />
