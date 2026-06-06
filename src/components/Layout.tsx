@@ -58,9 +58,9 @@ export default function Layout() {
           {user?.restaurantLogo ? (
             <img src={user.restaurantLogo.startsWith('http') ? user.restaurantLogo : `${API_URL}${user.restaurantLogo}`} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0" />
           ) : (
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-lg shrink-0">🍽</div>
+            <img src="/log1.png" alt="menuGo" className="w-9 h-9 object-contain shrink-0" />
           )}
-          {sidebarOpen && <span className="font-extrabold text-gray-800 text-lg">{user?.restaurantNom || 'RestoPro'}</span>}
+          {sidebarOpen && <span className="font-extrabold text-gray-800 text-lg">{user?.restaurantNom || 'menuGo'}</span>}
         </div>
 
         {/* User */}

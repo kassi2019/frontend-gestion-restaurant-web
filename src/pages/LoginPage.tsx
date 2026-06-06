@@ -56,12 +56,12 @@ export default function LoginPage() {
 
       <div className="w-full max-w-md relative z-10 animate-slideUp">
         {/* Logo + Brand */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-24 h-24 rounded-full mb-4" style={{ background: 'linear-gradient(135deg, #E86B2A, #F59E0B)', boxShadow: '0 0 60px rgba(232,107,42,0.3)' }}>
-            <span className="text-5xl">🍽️</span>
-          </div>
-          <h1 className="text-4xl font-extrabold text-white tracking-tight">RestoPro</h1>
-          <p className="text-orange-200/50 text-base mt-2">Gestion Restaurant Intelligente</p>
+        <div className="text-center mb-6">
+          {/* <div className="inline-flex items-center justify-center mb-2">
+            <img src="/log1.png" alt="menuGo" className="w-24 h-24 sm:w-32 sm:h-32 object-contain" />
+          </div> */}
+          <h1 className="text-4xl font-extrabold text-white tracking-tight">menuGo</h1>
+          <p className="text-orange-200/50 text-base mt-1">L'intelligence au service de la restauration</p>
         </div>
 
         {/* Form */}
