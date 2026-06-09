@@ -36,6 +36,21 @@ export const authApi = {
   }),
   getAbonnement: () => api.get('/auth/abonnement'),
   activerCode: (data: { telephone: string; code: string }) => api.post('/auth/activer', data),
+  // Nouveau système
+  getPlans: () => api.get('/auth/plans'),
+  getConfigPaiement: () => api.get('/auth/config-paiement'),
+  initierPaiement: (data: { planId: number; infosPaiement?: string }) => api.post('/auth/paiement-abonnement', data),
+  getMesPaiements: () => api.get('/auth/mes-paiements'),
+  // Super admin - Gestion plans
+  getAllPlans: () => api.get('/auth/plans/all'),
+  createPlan: (data: { nom: string; dureeJours: number; prix: number }) => api.post('/auth/plans', data),
+  updatePlan: (id: number, data: { nom?: string; dureeJours?: number; prix?: number; actif?: boolean }) => api.patch(`/auth/plans/${id}`, data),
+  deletePlan: (id: number) => api.delete(`/auth/plans/${id}`),
+  // Super admin - Paiements
+  getPaiementsEnAttente: () => api.get('/auth/paiements-en-attente'),
+  confirmerPaiement: (id: number) => api.patch(`/auth/paiements/${id}/confirmer`),
+  rejeterPaiement: (id: number) => api.patch(`/auth/paiements/${id}/rejeter`),
+  // Ancien système
   genererCodes: (data: { dureeJours: number; nombre: number }) => api.post('/auth/generer-codes', data),
   listeCodes: () => api.get('/auth/codes'),
   supprimerCode: (id: number) => api.delete(`/auth/codes/${id}`),
@@ -112,6 +127,14 @@ export const serveurTablesApi = {
   unassign: (tableId: number) => api.delete(`/serveur-tables/${tableId}`),
   reassign: (data: { fromServeurId: number; toServeurId: number; tableId?: number }) => api.patch('/serveur-tables/reassign', data),
   runDailyCheck: () => api.post('/serveur-tables/run-check'),
+};
+
+export const printerApi = {
+  getConfig: () => api.get('/printer/config'),
+  updateConfig: (data: any) => api.post('/printer/config', data),
+  testPrint: () => api.post('/printer/test'),
+  printFacture: (id: number) => api.post(`/printer/facture/${id}`),
+  printTicket: (contenu: string, titre?: string) => api.post('/printer/ticket', { contenu, titre }),
 };
 
 export const planningApi = {

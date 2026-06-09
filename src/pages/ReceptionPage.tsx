@@ -1,8 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
-import { commandesApi, tablesApi, usersApi } from '../services/api';
+import { commandesApi, tablesApi, usersApi, printerApi } from '../services/api';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../store';
-import { API_URL } from '../config';
 import { useToast } from '../services/toast';
 import { connectSocket, onNotification, onNewCommande, onCommandeStatusChange } from '../services/socket';
 
@@ -194,161 +193,137 @@ export default function ReceptionPage() {
     return `${n.toFixed(2)} ${devise}`;
   };
 
-  // Imprimer un ticket dans un nouvel onglet
-  const imprimerTicket = (cmd: any, type: 'cuisine' | 'bar' | 'serveur' | 'caisse') => {
+  // Imprimer un ticket sur l'imprimante physique
+  const imprimerTicket = async (cmd: any, type: 'cuisine' | 'bar' | 'serveur' | 'caisse') => {
     const tableNumero = getTableNumero(cmd.tableId);
     const serveurNom = getServeurNom(cmd.serveurId) || '—';
     const dateStr = new Date(cmd.dateCommande).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     const cmdRef = `CMD-${String(cmd.id).padStart(4, '0')}`;
-    const logoUrl = user?.restaurantLogo
-      ? (user.restaurantLogo.startsWith('http') ? user.restaurantLogo : `${API_URL}${user.restaurantLogo}`)
-      : null;
 
-    // Déterminer les articles selon le type de ticket
     let articles: any[] = [];
     let titre = '';
     let afficherPrix = false;
     let afficherTotal = false;
 
     switch (type) {
-      case 'cuisine':
-        titre = '🍳 TICKET CUISINE';
-        articles = getDetailsCuisine(cmd);
-        break;
-      case 'bar':
-        titre = '🍸 TICKET BAR';
-        articles = getDetailsBar(cmd);
-        break;
-      case 'serveur':
-        titre = '🧾 TICKET SERVEUR';
-        articles = cmd.details || [];
-        afficherPrix = true;
-        afficherTotal = true;
-        break;
-      case 'caisse':
-        titre = '💰 TICKET CAISSE';
-        articles = cmd.details || [];
-        afficherPrix = true;
-        afficherTotal = true;
-        break;
+      case 'cuisine': titre = 'TICKET CUISINE'; articles = getDetailsCuisine(cmd); break;
+      case 'bar': titre = 'TICKET BAR'; articles = getDetailsBar(cmd); break;
+      case 'serveur': titre = 'TICKET SERVEUR'; articles = cmd.details || []; afficherPrix = true; afficherTotal = true; break;
+      case 'caisse': titre = 'TICKET CAISSE'; articles = cmd.details || []; afficherPrix = true; afficherTotal = true; break;
     }
 
-    const pointilles = '<div style="border-top:2px dashed #aaa;margin:12px 0"></div>';
+    const width = 42;
+    const pad = (text: string, w: number) => text + ' '.repeat(Math.max(0, w - text.length));
+    const dash = '-'.repeat(width);
     const total = Number(cmd.montantTotal || 0).toFixed(2);
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${titre}</title>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: 'Courier New', monospace; padding: 20px; max-width: 300px; margin: 0 auto; color: #222; }
-  .logo { width: 50px; height: 50px; border-radius: 12px; object-fit: cover; margin: 0 auto 8px; display: block; }
-  .logo-placeholder { width: 50px; height: 50px; border-radius: 12px; background: linear-gradient(135deg, #f97316, #f59e0b); margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
-  h1 { font-size: 16px; text-align: center; margin-bottom: 4px; }
-  h2 { font-size: 12px; text-align: center; color: #888; margin-bottom: 10px; font-weight: 400; }
-  h3 { font-size: 14px; text-align: center; margin-bottom: 2px; }
-  .info { font-size: 11px; text-align: center; color: #888; margin-bottom: 2px; }
-  .footer { text-align: center; font-size: 10px; color: #aaa; margin-top: 16px; }
-  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-</style></head><body>
-  ${logoUrl ? `<img src="${logoUrl}" class="logo" alt="">` : '<div class="logo-placeholder">🍽</div>'}
-  <h1>${user?.restaurantNom || 'RestoPro'}</h1>
-  ${user?.restaurantTelephone ? `<h2>Tel: ${user.restaurantTelephone}</h2>` : ''}
-  ${pointilles}
-  <h3>${titre}</h3>
-  <p class="info">Table: ${tableNumero}</p>
-  <p class="info">${cmdRef} · ${dateStr}</p>
-  ${type === 'serveur' || type === 'caisse' ? `<p class="info">Serveur: ${serveurNom}</p>` : ''}
-  ${pointilles}
-  ${articles.map(d => afficherPrix
-    ? `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px"><span>${d.quantite}x ${d.menu?.nom || 'Plat'}</span><span style="font-weight:600">${(Number(d.prix||0)*d.quantite).toFixed(2)} ${devise}</span></div>`
-    : `<div style="font-size:13px;padding:3px 0">${d.quantite}x ${d.menu?.nom || 'Plat'}</div>`
-  ).join('')}
-  ${articles.length === 0 ? '<p style="text-align:center;color:#aaa;font-style:italic;font-size:12px">Aucun article</p>' : ''}
-  ${afficherTotal ? `${pointilles}<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:15px;font-weight:900"><span>TOTAL</span><span>${total} ${devise}</span></div>` : ''}
-  ${type === 'caisse' ? `<p style="text-align:center;font-size:10px;font-weight:700;background:#FFF3E0;padding:4px 8px;border-radius:6px;margin-top:8px">Réf: ${cmdRef}</p>` : ''}
-  ${pointilles}
-  <p class="footer">RestoPro © ${new Date().getFullYear()}<br>Merci de votre visite</p>
-  <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);}</script>
-</body></html>`;
+    const lines: string[] = [];
+    const center = (t: string) => ' '.repeat(Math.max(0, Math.floor((width - t.length) / 2))) + t;
 
-    const w = window.open('', '_blank', 'width=400,height=600');
-    if (w) {
-      w.document.write(html);
-      w.document.close();
+    lines.push(center(titre));
+    lines.push(dash);
+    lines.push(`Table: ${tableNumero}  ${cmdRef}`);
+    lines.push(dateStr);
+    if (type === 'serveur' || type === 'caisse') lines.push(`Serveur: ${serveurNom}`);
+    lines.push(dash);
+
+    if (articles.length === 0) {
+      lines.push(center('Aucun article'));
+    } else {
+      articles.forEach(d => {
+        const qte = `x${d.quantite}`;
+        const nom = (d.menu?.nom || 'Plat').substring(0, 25);
+        if (afficherPrix) {
+          const prix = `${(Number(d.prix || 0) * d.quantite).toFixed(2)} ${devise}`;
+          lines.push(`${qte} ${nom}${' '.repeat(Math.max(1, width - qte.length - nom.length - prix.length))}${prix}`);
+        } else {
+          lines.push(`${qte} ${nom}`);
+        }
+      });
     }
+
+    if (afficherTotal) {
+      lines.push(dash);
+      lines.push(pad('TOTAL', width - total.length - devise.length - 1) + `${total} ${devise}`);
+    }
+    if (type === 'caisse') lines.push(`Ref: ${cmdRef}`);
+    lines.push(dash);
+
+    try {
+      await printerApi.printTicket(lines.join('\n'), titre);
+      toast.success('Ticket imprimé');
+    } catch { toast.error('Erreur impression'); }
   };
 
-  // Imprimer les 4 tickets d'un coup (format rouleau thermique)
-  const imprimerTout = (item: any) => {
-    // Si item groupé, fusionner toutes les commandes
+  // Imprimer les tickets groupés sur l'imprimante physique
+  const imprimerTout = async (item: any) => {
     const commandes = item.commandes || [item];
     const tableNumero = item.tableNumero || getTableNumero(item.tableId);
     const serveurNom = getServeurNom(item.serveurId) || '—';
-    const logoUrl = user?.restaurantLogo
-      ? (user.restaurantLogo.startsWith('http') ? user.restaurantLogo : `${API_URL}${user.restaurantLogo}`)
-      : null;
-
-    // Fusionner tous les détails
+    const refs: string[] = [];
     const allDetails: any[] = [];
     const allCuisine: any[] = [];
     const allBar: any[] = [];
-    const refs: string[] = [];
+
     commandes.forEach((cmd: any) => {
       refs.push('CMD-' + String(cmd.id).padStart(4, '0'));
       allDetails.push(...(cmd.details || []));
       allCuisine.push(...getDetailsCuisine(cmd));
       allBar.push(...getDetailsBar(cmd));
     });
+
     const refStr = refs.join(' · ');
     const total = Number(commandes.reduce((s: number, c: any) => s + Number(c.montantTotal || 0), 0)).toFixed(2);
+    const width = 42;
+    const dash = '-'.repeat(width);
+    const cut = '--- ✂ ---';
+    const center = (t: string) => ' '.repeat(Math.max(0, Math.floor((width - t.length) / 2))) + t;
 
-    const ligne = '<div style="border-top:1px dashed #000;margin:6px 0"></div>';
-    const coupe = '<div style="text-align:center;padding:8px 0;font-size:10px;letter-spacing:8px">- - - - ✂ - - - -</div>';
+    const blocTicketTexte = (titre: string, items: any[], avecPrix: boolean, avecTotal: boolean, refCaisse?: boolean) => {
+      const bl: string[] = [];
+      bl.push(center(titre));
+      bl.push(`  ${refStr}`);
+      bl.push(dash);
+      if (items.length === 0) {
+        bl.push(center('Aucun article'));
+      } else {
+        items.forEach(d => {
+          const qte = `x${d.quantite}`;
+          const nom = (d.menu?.nom || 'Plat').substring(0, 25);
+          if (avecPrix) {
+            const prix = `${(Number(d.prix || 0) * d.quantite).toFixed(2)} ${devise}`;
+            bl.push(`${qte} ${nom}${' '.repeat(Math.max(1, width - qte.length - nom.length - prix.length))}${prix}`);
+          } else {
+            bl.push(`${qte} ${nom}`);
+          }
+        });
+      }
+      if (avecTotal) {
+        bl.push(dash);
+        bl.push('TOTAL' + ' '.repeat(Math.max(1, width - 5 - total.length - devise.length - 1)) + `${total} ${devise}`);
+      }
+      if (refCaisse) bl.push(`Ref: ${refStr}`);
+      return bl.join('\n');
+    };
 
-    const blocTicket = (titre: string, items: any[], avecPrix: boolean, avecTotal: boolean, refCaisse?: boolean) => `
-      <h3 style="text-align:center;font-size:13px;margin:4px 0">${titre}</h3>
-      <p style="text-align:center;font-size:9px;color:#555">${refStr}</p>
-      ${ligne}
-      ${items.map(d => avecPrix
-        ? `<div style="display:flex;justify-content:space-between;font-size:11px;padding:1px 0"><span>${d.quantite}x ${d.menu?.nom || 'Plat'}</span><span>${(Number(d.prix||0)*d.quantite).toFixed(2)} ${devise}</span></div>`
-        : `<div style="font-size:11px;padding:1px 0">${d.quantite}x ${d.menu?.nom || 'Plat'}</div>`
-      ).join('') || '<p style="text-align:center;color:#999;font-size:10px;font-style:italic">Aucun article</p>'}
-      ${avecTotal ? `${ligne}<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:900;padding:2px 0"><span>TOTAL</span><span>${total} ${devise}</span></div>` : ''}
-      ${refCaisse ? `<p style="text-align:center;font-size:9px;font-weight:700;margin-top:4px">Réf: ${refStr}</p>` : ''}
-    `;
+    const contenu = [
+      center(user?.restaurantNom || 'RestoPro'),
+      center(`Table: ${tableNumero} · Serveur: ${serveurNom}`),
+      dash,
+      blocTicketTexte('CUISINE', allCuisine, false, false),
+      cut,
+      blocTicketTexte('BAR', allBar, false, false),
+      cut,
+      blocTicketTexte('SERVEUR', allDetails, true, true),
+      cut,
+      blocTicketTexte('CAISSE', allDetails, true, true, true),
+      dash,
+    ].join('\n');
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Commande ${refStr}</title>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: 'Courier New', monospace; padding: 10px; max-width: 280px; margin: 0 auto; color: #000; font-size: 11px; }
-  .logo { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; margin: 0 auto 4px; display: block; }
-  .logo-placeholder { width: 44px; height: 44px; border-radius: 10px; background: #f97316; margin: 0 auto 4px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #fff; }
-  @media print { body { width: 72mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-</style></head><body>
-  ${logoUrl ? `<img src="${logoUrl}" class="logo" alt="">` : '<div class="logo-placeholder">🍽</div>'}
-  <h1 style="text-align:center;font-size:15px;margin-bottom:2px">${user?.restaurantNom || 'RestoPro'}</h1>
-  ${user?.restaurantTelephone ? `<p style="text-align:center;font-size:9px;color:#555;margin-bottom:4px">Tel: ${user.restaurantTelephone}</p>` : ''}
-  <p style="text-align:center;font-size:9px;color:#555">Table: ${tableNumero} · Serveur: ${serveurNom}</p>
-  ${ligne}
-
-  ${blocTicket('🍳 CUISINE', allCuisine, false, false)}
-  ${coupe}
-  ${blocTicket('🍸 BAR', allBar, false, false)}
-  ${coupe}
-  ${blocTicket('🧾 SERVEUR', allDetails, true, true)}
-  ${coupe}
-  ${blocTicket('💰 CAISSE', allDetails, true, true, true)}
-
-  ${ligne}
-  <p style="text-align:center;font-size:9px;color:#aaa;margin-top:4px">RestoPro © ${new Date().getFullYear()}</p>
-  <p style="text-align:center;font-size:9px;color:#aaa">Merci de votre visite</p>
-  <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);}</script>
-</body></html>`;
-
-    const w = window.open('', '_blank', 'width=320,height=700');
-    if (w) {
-      w.document.write(html);
-      w.document.close();
-    }
+    try {
+      await printerApi.printTicket(contenu, `Commande ${refStr}`);
+      toast.success('Tickets imprimés');
+    } catch { toast.error('Erreur impression'); }
   };
 
   return (
