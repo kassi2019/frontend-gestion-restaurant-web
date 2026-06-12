@@ -134,7 +134,10 @@ export const printerApi = {
   updateConfig: (data: any) => api.post('/printer/config', data),
   testPrint: () => api.post('/printer/test'),
   printFacture: (id: number) => api.post(`/printer/facture/${id}`),
-  printTicket: (contenu: string, titre?: string) => api.post('/printer/ticket', { contenu, titre }),
+  printTicket: (contenu: string, titre?: string, destination?: string) =>
+    api.post('/printer/ticket', { contenu, titre, destination }),
+  printCommandeTickets: (commandeId: number) =>
+    api.post(`/printer/commande/${commandeId}/tickets`),
 };
 
 export const planningApi = {

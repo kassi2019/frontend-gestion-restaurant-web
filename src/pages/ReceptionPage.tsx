@@ -150,11 +150,16 @@ export default function ReceptionPage() {
     } catch (err: any) { toast.error(err.response?.data?.message || 'Erreur'); }
   };
 
-  // Valider → VALIDEE → tickets
+  // Valider → RECEPTION_VALIDE → impression auto
   const handleValider = async (cmd: any) => {
     try {
       await commandesApi.updateStatut(cmd.id, 'RECEPTION_VALIDE');
       toast.success('Commande validée !');
+      // Impression automatique par destination
+      try {
+        const { data } = await printerApi.printCommandeTickets(cmd.id);
+        if (data.ok) toast.success('🧾 ' + (data.message || 'Tickets imprimés'));
+      } catch { toast.error('Erreur impression auto'); }
       setTicketCmd({ ...cmd, statut: 'RECEPTION_VALIDE' });
       setShowTickets(true);
       loadData();
@@ -194,7 +199,7 @@ export default function ReceptionPage() {
   };
 
   // Imprimer un ticket sur l'imprimante physique
-  const imprimerTicket = async (cmd: any, type: 'cuisine' | 'bar' | 'serveur' | 'caisse') => {
+  const imprimerTicket = async (cmd: any, type: 'cuisine' | 'bar' | 'serveur') => {
     const tableNumero = getTableNumero(cmd.tableId);
     const serveurNom = getServeurNom(cmd.serveurId) || '—';
     const dateStr = new Date(cmd.dateCommande).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -209,7 +214,6 @@ export default function ReceptionPage() {
       case 'cuisine': titre = 'TICKET CUISINE'; articles = getDetailsCuisine(cmd); break;
       case 'bar': titre = 'TICKET BAR'; articles = getDetailsBar(cmd); break;
       case 'serveur': titre = 'TICKET SERVEUR'; articles = cmd.details || []; afficherPrix = true; afficherTotal = true; break;
-      case 'caisse': titre = 'TICKET CAISSE'; articles = cmd.details || []; afficherPrix = true; afficherTotal = true; break;
     }
 
     const width = 42;
@@ -224,7 +228,7 @@ export default function ReceptionPage() {
     lines.push(dash);
     lines.push(`Table: ${tableNumero}  ${cmdRef}`);
     lines.push(dateStr);
-    if (type === 'serveur' || type === 'caisse') lines.push(`Serveur: ${serveurNom}`);
+    if (type === 'serveur') lines.push(`Serveur: ${serveurNom}`);
     lines.push(dash);
 
     if (articles.length === 0) {
@@ -232,10 +236,12 @@ export default function ReceptionPage() {
     } else {
       articles.forEach(d => {
         const qte = `x${d.quantite}`;
-        const nom = (d.menu?.nom || 'Plat').substring(0, 25);
+        const prixStr = afficherPrix ? `${(Number(d.prix || 0) * d.quantite).toFixed(2)} ${devise}` : '';
+        const maxNom = Math.max(10, width - qte.length - 1 - prixStr.length - (afficherPrix ? 1 : 0));
+        const nomBrut = d.menu?.nom || 'Plat';
+        const nom = nomBrut.length > maxNom ? nomBrut.substring(0, maxNom) : nomBrut;
         if (afficherPrix) {
-          const prix = `${(Number(d.prix || 0) * d.quantite).toFixed(2)} ${devise}`;
-          lines.push(`${qte} ${nom}${' '.repeat(Math.max(1, width - qte.length - nom.length - prix.length))}${prix}`);
+          lines.push(`${qte} ${nom}${' '.repeat(Math.max(1, width - qte.length - nom.length - prixStr.length))}${prixStr}`);
         } else {
           lines.push(`${qte} ${nom}`);
         }
@@ -246,7 +252,6 @@ export default function ReceptionPage() {
       lines.push(dash);
       lines.push(pad('TOTAL', width - total.length - devise.length - 1) + `${total} ${devise}`);
     }
-    if (type === 'caisse') lines.push(`Ref: ${cmdRef}`);
     lines.push(dash);
 
     try {
@@ -255,74 +260,15 @@ export default function ReceptionPage() {
     } catch { toast.error('Erreur impression'); }
   };
 
-  // Imprimer les tickets groupés sur l'imprimante physique
+  // Imprimer les tickets groupés par destination (appel backend)
   const imprimerTout = async (item: any) => {
     const commandes = item.commandes || [item];
-    const tableNumero = item.tableNumero || getTableNumero(item.tableId);
-    const serveurNom = getServeurNom(item.serveurId) || '—';
-    const refs: string[] = [];
-    const allDetails: any[] = [];
-    const allCuisine: any[] = [];
-    const allBar: any[] = [];
-
-    commandes.forEach((cmd: any) => {
-      refs.push('CMD-' + String(cmd.id).padStart(4, '0'));
-      allDetails.push(...(cmd.details || []));
-      allCuisine.push(...getDetailsCuisine(cmd));
-      allBar.push(...getDetailsBar(cmd));
-    });
-
-    const refStr = refs.join(' · ');
-    const total = Number(commandes.reduce((s: number, c: any) => s + Number(c.montantTotal || 0), 0)).toFixed(2);
-    const width = 42;
-    const dash = '-'.repeat(width);
-    const cut = '--- ✂ ---';
-    const center = (t: string) => ' '.repeat(Math.max(0, Math.floor((width - t.length) / 2))) + t;
-
-    const blocTicketTexte = (titre: string, items: any[], avecPrix: boolean, avecTotal: boolean, refCaisse?: boolean) => {
-      const bl: string[] = [];
-      bl.push(center(titre));
-      bl.push(`  ${refStr}`);
-      bl.push(dash);
-      if (items.length === 0) {
-        bl.push(center('Aucun article'));
-      } else {
-        items.forEach(d => {
-          const qte = `x${d.quantite}`;
-          const nom = (d.menu?.nom || 'Plat').substring(0, 25);
-          if (avecPrix) {
-            const prix = `${(Number(d.prix || 0) * d.quantite).toFixed(2)} ${devise}`;
-            bl.push(`${qte} ${nom}${' '.repeat(Math.max(1, width - qte.length - nom.length - prix.length))}${prix}`);
-          } else {
-            bl.push(`${qte} ${nom}`);
-          }
-        });
-      }
-      if (avecTotal) {
-        bl.push(dash);
-        bl.push('TOTAL' + ' '.repeat(Math.max(1, width - 5 - total.length - devise.length - 1)) + `${total} ${devise}`);
-      }
-      if (refCaisse) bl.push(`Ref: ${refStr}`);
-      return bl.join('\n');
-    };
-
-    const contenu = [
-      center(user?.restaurantNom || 'RestoPro'),
-      center(`Table: ${tableNumero} · Serveur: ${serveurNom}`),
-      dash,
-      blocTicketTexte('CUISINE', allCuisine, false, false),
-      cut,
-      blocTicketTexte('BAR', allBar, false, false),
-      cut,
-      blocTicketTexte('SERVEUR', allDetails, true, true),
-      cut,
-      blocTicketTexte('CAISSE', allDetails, true, true, true),
-      dash,
-    ].join('\n');
-
     try {
-      await printerApi.printTicket(contenu, `Commande ${refStr}`);
-      toast.success('Tickets imprimés');
+      for (const cmd of commandes) {
+        const { data } = await printerApi.printCommandeTickets(cmd.id);
+        if (!data.ok) { toast.error(data.message || 'Échec impression'); return; }
+      }
+      toast.success('🧾 Tickets imprimés et découpés par destination');
     } catch { toast.error('Erreur impression'); }
   };
 
@@ -592,33 +538,6 @@ export default function ReceptionPage() {
                 <span className="font-extrabold">TOTAL</span>
                 <span className="font-extrabold text-lg text-orange-600">{formatPrix(ticketCmd.montantTotal)}</span>
               </div>
-            </div>
-
-            {/* Ticket CAISSE */}
-            <div className="bg-amber-50 rounded-xl p-4 mb-3 border border-amber-200">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-extrabold text-sm text-gray-800">💰 CAISSE</h4>
-                <button onClick={() => imprimerTicket(ticketCmd, 'caisse')}
-                  className="px-3 py-1 bg-amber-200 border border-amber-300 rounded-lg text-xs font-semibold cursor-pointer hover:bg-amber-300 transition-colors">
-                  🖨 Imprimer
-                </button>
-              </div>
-              <p className="text-xs text-gray-400 mb-2">
-                Table {getTableNumero(ticketCmd.tableId)} · #{String(ticketCmd.id).padStart(4, '0')} · Serveur {getServeurNom(ticketCmd.serveurId) || '?'}
-              </p>
-              {(ticketCmd.details || []).map((d: any, i: number) => (
-                <div key={i} className="flex justify-between text-sm py-0.5">
-                  <span>{d.quantite}x {d.menu?.nom || 'Plat'}</span>
-                  <span className="font-semibold">{formatPrix(Number(d.prix) * d.quantite)}</span>
-                </div>
-              ))}
-              <div className="border-t border-amber-300 mt-3 pt-3 flex justify-between">
-                <span className="font-extrabold">TOTAL À PAYER</span>
-                <span className="font-extrabold text-lg text-red-600">{formatPrix(ticketCmd.montantTotal)}</span>
-              </div>
-              <p className="text-center text-xs font-bold text-amber-700 bg-amber-100 rounded-lg py-1 mt-3">
-                Réf : CMD-{String(ticketCmd.id).padStart(4, '0')}
-              </p>
             </div>
 
             <button onClick={() => setShowTickets(false)}

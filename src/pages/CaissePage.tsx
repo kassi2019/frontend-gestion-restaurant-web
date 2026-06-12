@@ -199,11 +199,28 @@ export default function CaissePage() {
   const imprimerTicketCommande = (cmd: any) => {
     const total = format(cmd.montantTotal);
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Commande CMD-${String(cmd.id).padStart(4, '0')}</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Courier New',monospace;padding:20px;max-width:300px;margin:0 auto;color:#222}
-h1{font-size:16px;text-align:center}h2{font-size:12px;text-align:center;color:#888;margin:8px 0}.line{border-top:1px dashed #aaa;margin:12px 0}
-</style></head><body><h1>${user?.restaurantNom || 'RestoPro'}</h1><h2>Table ${cmd.table?.numero || '?'} · CMD-${String(cmd.id).padStart(4, '0')}</h2><div class="line"></div>
-${(cmd.details || []).map((d: any) => `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px"><span>${d.quantite}x ${d.menu?.nom || 'Plat'}</span><span>${(Number(d.prix||0)*d.quantite).toFixed(2)} ${user?.devise || '€'}</span></div>`).join('')}
-<div class="line"></div><div style="display:flex;justify-content:space-between;font-size:16px;font-weight:900"><span>TOTAL</span><span>${total} ${user?.devise || '€'}</span></div>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Courier New',monospace;padding:20px;max-width:300px;margin:0 auto;color:#222}
+h1{font-size:16px;text-align:center;font-weight:bold}
+h2{font-size:12px;text-align:center;color:#888;margin:8px 0}
+.line{border-top:1px dashed #aaa;margin:12px 0}
+.article-name{flex:1;word-break:break-word;padding-right:4px}
+.article-price{white-space:nowrap;font-weight:bold}
+.total-row{display:flex;justify-content:space-between;font-size:16px;font-weight:bold}
+@media print{
+  body{padding:3mm;width:80mm;max-width:80mm;margin:0;color:#000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .article-price{font-weight:bold!important}
+  .total-row{font-weight:bold!important}
+  h1{font-weight:bold!important}
+}
+</style></head><body>
+<h1>${user?.restaurantNom || 'RestoPro'}</h1>
+<h2>Table ${cmd.table?.numero || '?'} · CMD-${String(cmd.id).padStart(4, '0')}</h2>
+<div class="line"></div>
+${(cmd.details || []).map((d: any) => `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px"><span class="article-name">${d.quantite}x ${d.menu?.nom || 'Plat'}</span><span class="article-price">${(Number(d.prix||0)*d.quantite).toFixed(2)} ${user?.devise || '€'}</span></div>`).join('')}
+<div class="line"></div>
+<div class="total-row"><span>TOTAL</span><span>${total} ${user?.devise || '€'}</span></div>
 <div style="text-align:center;margin-top:16px;font-size:10px;color:#aaa">RestoPro © ${new Date().getFullYear()}</div>
 <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);}</script></body></html>`;
     const w = window.open('', '_blank', 'width=400,height=600');
