@@ -33,7 +33,7 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [notifBadge, setNotifBadge] = useState(0);
 
-  const handleLogout = () => { disconnectSocket(); dispatch(logout()); navigate('/login'); };
+  const handleLogout = () => { disconnectSocket(); dispatch(logout()); navigate('/'); };
 
   useEffect(() => {
     if (user?.id && user?.role) {

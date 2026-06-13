@@ -23,16 +23,10 @@ import LivraisonsPage from './pages/LivraisonsPage';
 import { ToastProvider } from './services/toast';
 import { DialogProvider } from './services/dialog';
 
-function AuthGuard({ children }: { children: React.ReactNode }) {
+function ProtectedLayout() {
   const token = useSelector((s: RootState) => s.auth.token);
-  if (!token) return <Navigate to="/login" replace />;
-  return <>{children}</>;
-}
-
-function LoginGuard({ children }: { children: React.ReactNode }) {
-  const token = useSelector((s: RootState) => s.auth.token);
-  if (token) return <Navigate to="/" replace />;
-  return <>{children}</>;
+  if (!token) return <LoginPage />;
+  return <Layout />;
 }
 
 export default function App() {
@@ -42,8 +36,7 @@ export default function App() {
       <DialogProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<LoginGuard><LoginPage /></LoginGuard>} />
-          <Route element={<AuthGuard><Layout /></AuthGuard>}>
+          <Route element={<ProtectedLayout />}>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/tables" element={<TablesPage />} />
             <Route path="/commandes" element={<CommandesPage />} />
