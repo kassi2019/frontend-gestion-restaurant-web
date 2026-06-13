@@ -6,7 +6,7 @@ import { useToast } from '../services/toast';
 import { onNewCommande, onCommandeStatusChange } from '../services/socket';
 import { addToQueue, getIsOnline } from '../services/offline';
 
-const STATUTS = ['EN_ATTENTE', 'VALIDEE', 'EN_PREPARATION', 'PRETE', 'SERVIE', 'PAYEE'];
+const STATUTS = ['EN_ATTENTE', 'VALIDEE','PAYEE'];
 
 export default function CommandesPage() {
   const user = useSelector((s: RootState) => s.auth.user);
@@ -124,7 +124,11 @@ export default function CommandesPage() {
     .filter(c => !dateFilter || new Date(c.dateCommande).toLocaleDateString('fr-FR') === new Date(dateFilter).toLocaleDateString('fr-FR'));
 
   const statutColor = (s: string) => {
-    const map: Record<string, string> = { EN_ATTENTE: 'bg-gray-100 text-gray-700', VALIDEE: 'bg-blue-100 text-blue-700', EN_PREPARATION: 'bg-amber-100 text-amber-700', PRETE: 'bg-green-100 text-green-700', SERVIE: 'bg-teal-100 text-teal-700', PAYEE: 'bg-purple-100 text-purple-700', ANNULEE: 'bg-red-100 text-red-700' };
+    const map: Record<string, string> = {
+      EN_ATTENTE: 'bg-gray-100 text-gray-700', VALIDEE: 'bg-blue-100 text-blue-700',
+      // EN_PREPARATION: 'bg-amber-100 text-amber-700', PRETE: 'bg-green-100 text-green-700', SERVIE: 'bg-teal-100 text-teal-700',
+      PAYEE: 'bg-purple-100 text-purple-700', ANNULEE: 'bg-red-100 text-red-700'
+    };
     return map[s] || 'bg-gray-100';
   };
 
@@ -137,8 +141,8 @@ export default function CommandesPage() {
         <div className="flex items-center gap-3">
           <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="h-10 bg-white border rounded-xl px-3 text-sm" />
           <button onClick={load} className="text-orange-500 font-semibold cursor-pointer hover:underline">🔄</button>
-          <button onClick={() => { loadForCreate(); setShowCreate(true); }}
-            className="bg-orange-500 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-orange-600 cursor-pointer shadow-sm">+ Nouvelle</button>
+          {/* <button onClick={() => { loadForCreate(); setShowCreate(true); }}
+            className="bg-orange-500 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-orange-600 cursor-pointer shadow-sm">+ Nouvelle</button> */}
         </div>
       </div>
 

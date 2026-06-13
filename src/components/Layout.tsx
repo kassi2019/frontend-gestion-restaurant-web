@@ -6,6 +6,7 @@ import { logout } from '../store/authSlice';
 import { API_URL } from '../config';
 import { connectSocket, disconnectSocket, onNotification } from '../services/socket';
 import OfflineBanner from './OfflineBanner';
+import { useToast } from '../services/toast';
 
 const allMenuItems = [
   { path: '/', label: 'Accueil', icon: '🏠', roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'RECEPTIONNISTE', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'] },
@@ -29,6 +30,7 @@ const allMenuItems = [
 export default function Layout() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const toast = useToast();
   const user = useSelector((s: RootState) => s.auth.user);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [notifBadge, setNotifBadge] = useState(0);
@@ -38,8 +40,9 @@ export default function Layout() {
   useEffect(() => {
     if (user?.id && user?.role) {
       connectSocket(user.id, user.role);
-      const unsub = onNotification(() => {
+      const unsub = onNotification((data: any) => {
         setNotifBadge(n => n + 1);
+        if (data?.message) toast.info(data.message);
       });
       return () => { unsub(); disconnectSocket(); };
     }

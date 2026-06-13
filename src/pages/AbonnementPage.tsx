@@ -191,7 +191,7 @@ export default function AbonnementPage() {
       )}
 
       {/* Activation par code (ancien système) */}
-      {isAdmin && (
+      {/* {isAdmin && (
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
           <h3 className="font-bold text-gray-800 mb-3">🔑 Activer un code</h3>
           <p className="text-xs text-gray-400 mb-3">Si vous avez reçu un code d'activation du Super Admin.</p>
@@ -207,7 +207,7 @@ export default function AbonnementPage() {
             </button>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Historique des paiements */}
       {paiements.length > 0 && (

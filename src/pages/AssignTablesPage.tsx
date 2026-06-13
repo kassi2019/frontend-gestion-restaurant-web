@@ -101,12 +101,12 @@ export default function AssignTablesPage() {
           <p className="text-gray-400 text-sm">{assignments.length} assignation(s) active(s)</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleDailyCheck} className="bg-purple-500 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-purple-600 cursor-pointer">
+          {/* <button onClick={handleDailyCheck} className="bg-purple-500 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-purple-600 cursor-pointer">
             🤖 Vérification journalière
           </button>
           <button onClick={() => setShowReassign(true)} className="bg-amber-500 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-amber-600 cursor-pointer">
             🔀 Transférer
-          </button>
+          </button> */}
           <button onClick={() => { setSelectedTables([]); setShowAssign(true); }} className="bg-orange-500 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-orange-600 cursor-pointer shadow-sm">
             + Assigner
           </button>
