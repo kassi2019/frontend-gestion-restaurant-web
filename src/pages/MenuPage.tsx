@@ -29,6 +29,12 @@ export default function MenuPage() {
   const [variantForm, setVariantForm] = useState({ nom: '', prix: '', image: '' });
   const [variantSaving, setVariantSaving] = useState(false);
   const [variantImage, setVariantImage] = useState<File | null>(null);
+  // Accompagnements
+  const [showAccompModal, setShowAccompModal] = useState(false);
+  const [accompMenu, setAccompMenu] = useState<any>(null);
+  const [accompList, setAccompList] = useState<any[]>([]);
+  const [newAccomp, setNewAccomp] = useState('');
+  const [formAccomp, setFormAccomp] = useState('');
 
   const load = async () => {
     try {
@@ -49,7 +55,7 @@ export default function MenuPage() {
 
   const resetForm = () => {
     setForm({ nom: '', prix: '', categorieId: activeCat || 0, tempsPreparation: 15 });
-    setEditing(null); setSelectedImage(null); setPreview(null);
+    setEditing(null); setSelectedImage(null); setPreview(null); setFormAccomp('');
   };
 
   const handleSelectImage = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -65,7 +71,11 @@ export default function MenuPage() {
   const handleSave = async () => {
     if (!form.nom || !form.prix) return;
     try {
-      const payload = { ...form, prix: parseFloat(form.prix) };
+      const payload: any = { ...form, prix: parseFloat(form.prix) };
+      // Accompagnements optionnels (comma-separated string)
+      if (formAccomp.trim()) {
+        payload.accompagnements = formAccomp.split(',').map((n: string) => n.trim()).filter(Boolean);
+      }
 
       let menuId = editing?.id;
       if (editing) {
@@ -116,6 +126,38 @@ export default function MenuPage() {
     dialog.confirm({ title: 'Supprimer cette variante ?', message: 'Cette action est irréversible.', danger: true, confirmLabel: 'Supprimer', onConfirm: async () => {
       try { await menuApi.deleteVariant(variantId); load(); toast.success('Variante supprimée'); } catch {}
     }});
+  };
+
+  // ---- Accompagnements ----
+  const openAccompagnements = async (m: any) => {
+    setAccompMenu(m);
+    setShowAccompModal(true);
+    setNewAccomp('');
+    try {
+      const { data } = await menuApi.getAccompagnements(m.id);
+      setAccompList(data || []);
+    } catch { setAccompList(m.accompagnements || []); }
+  };
+
+  const handleAddAccomp = async () => {
+    if (!newAccomp.trim()) { toast.error('Nom requis'); return; }
+    try {
+      await menuApi.addAccompagnement(accompMenu.id, newAccomp.trim());
+      toast.success('Accompagnement ajouté');
+      setNewAccomp('');
+      const { data } = await menuApi.getAccompagnements(accompMenu.id);
+      setAccompList(data || []);
+      load();
+    } catch (err: any) { toast.error(err.response?.data?.message || 'Erreur'); }
+  };
+
+  const handleDeleteAccomp = async (id: number) => {
+    try {
+      await menuApi.deleteAccompagnement(id);
+      setAccompList(prev => prev.filter(a => a.id !== id));
+      toast.success('Accompagnement supprimé');
+      load();
+    } catch {}
   };
 
   const handleAddCat = async () => {
@@ -203,10 +245,24 @@ export default function MenuPage() {
                   ))}
                 </div>
               )}
+              {/* Accompagnements gratuits badge */}
+              {m.accompagnements?.length > 0 && (
+                <div className="mb-3">
+                  <div className="flex flex-wrap gap-1">
+                    {m.accompagnements.map((a: any) => (
+                      <span key={a.id} className="text-xs px-2 py-0.5 bg-green-50 text-green-700 rounded-full font-medium">
+                        ✓ {a.nom}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex gap-2 flex-wrap">
                 <button onClick={(e) => { e.stopPropagation(); openVariants(m); }}
                   className="text-xs px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg font-semibold cursor-pointer hover:bg-purple-100">📋 Variantes ({m.variants?.length || 0})</button>
-                <button onClick={() => { setEditing(m); setForm({ nom: m.nom, prix: String(m.prix), categorieId: m.categorieId, tempsPreparation: m.tempsPreparation }); setShowForm(true); }}
+                <button onClick={(e) => { e.stopPropagation(); openAccompagnements(m); }}
+                  className="text-xs px-3 py-1.5 bg-green-50 text-green-600 rounded-lg font-semibold cursor-pointer hover:bg-green-100">🎁 Accomp. ({m.accompagnements?.length || 0})</button>
+                <button onClick={() => { setEditing(m); setForm({ nom: m.nom, prix: String(m.prix), categorieId: m.categorieId, tempsPreparation: m.tempsPreparation }); setFormAccomp((m.accompagnements || []).map((a: any) => a.nom).join(', ')); setShowForm(true); }}
                   className="text-xs px-3 py-1.5 bg-gray-100 rounded-lg font-semibold cursor-pointer hover:bg-gray-200">✏️ Modifier</button>
                 <button onClick={() => handleDelete(m.id)} className="text-xs px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-semibold cursor-pointer hover:bg-red-100 ml-auto">🗑 Supprimer</button>
               </div>
@@ -250,7 +306,10 @@ export default function MenuPage() {
             <label className="block text-sm font-semibold text-gray-600 mb-1.5">Prix</label>
             <input value={form.prix} onChange={e => setForm({...form, prix: e.target.value})} type="number" step="0.01" placeholder="Ex: 15.00" className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-3" />
             <label className="block text-sm font-semibold text-gray-600 mb-1.5">Temps de préparation (minutes)</label>
-            <input value={form.tempsPreparation} onChange={e => setForm({...form, tempsPreparation: parseInt(e.target.value) || 0})} type="number" placeholder="Ex: 30" className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-4" />
+            <input value={form.tempsPreparation} onChange={e => setForm({...form, tempsPreparation: parseInt(e.target.value) || 0})} type="number" placeholder="Ex: 30" className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-3" />
+            <label className="block text-sm font-semibold text-gray-600 mb-1.5">🎁 Accompagnements gratuits (optionnel)</label>
+            <input value={formAccomp} onChange={e => setFormAccomp(e.target.value)} placeholder="Ex: Attiéké, Alloco, Frites" className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-4" />
+            <p className="text-xs text-gray-400 -mt-3 mb-3">Séparés par des virgules. Laissez vide si aucun.</p>
             <button onClick={handleSave} disabled={imageUploading}
               className="w-full py-2.5 bg-orange-500 text-white rounded-xl font-bold cursor-pointer hover:bg-orange-600 disabled:opacity-60">
               {imageUploading ? 'Upload image...' : editing ? 'Enregistrer' : 'Créer'}
@@ -321,6 +380,44 @@ export default function MenuPage() {
               </button>
             </div>
             <button onClick={() => setShowVariantModal(false)} className="w-full mt-3 py-2 text-gray-400 cursor-pointer">Fermer</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Accompagnements */}
+      {showAccompModal && accompMenu && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowAccompModal(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto animate-slideUp" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-1">🎁 Accompagnements gratuits</h3>
+            <p className="text-sm text-gray-400 mb-4">{accompMenu.nom} — {accompList.length} accompagnement(s)</p>
+
+            {accompList.length > 0 && (
+              <div className="space-y-2 mb-4">
+                {accompList.map((a: any) => (
+                  <div key={a.id} className="flex items-center gap-3 p-3 bg-green-50 rounded-xl border border-green-100">
+                    <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center text-sm">🎁</div>
+                    <span className="flex-1 font-semibold text-sm text-gray-800">{a.nom}</span>
+                    <button onClick={() => handleDeleteAccomp(a.id)}
+                      className="text-xs px-2 py-1 rounded-lg bg-red-50 text-red-500 cursor-pointer hover:bg-red-100">🗑</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {accompList.length === 0 && (
+              <p className="text-center text-gray-400 py-4">Aucun accompagnement pour ce plat</p>
+            )}
+
+            <div className="border-t pt-4">
+              <h4 className="font-semibold text-gray-800 mb-3">+ Ajouter un accompagnement</h4>
+              <input value={newAccomp} onChange={e => setNewAccomp(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddAccomp(); }}
+                placeholder="Ex: Attiéké" className="w-full h-11 bg-gray-50 border rounded-xl px-4 mb-3" />
+              <button onClick={handleAddAccomp}
+                className="w-full py-2.5 bg-green-500 text-white rounded-xl font-bold cursor-pointer hover:bg-green-600">
+                ✅ Ajouter
+              </button>
+            </div>
+            <button onClick={() => setShowAccompModal(false)} className="w-full mt-3 py-2 text-gray-400 cursor-pointer">Fermer</button>
           </div>
         </div>
       )}
