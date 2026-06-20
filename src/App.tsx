@@ -20,6 +20,7 @@ import AssignTablesPage from './pages/AssignTablesPage';
 import ReceptionPage from './pages/ReceptionPage';
 import ReservationsPage from './pages/ReservationsPage';
 import LivraisonsPage from './pages/LivraisonsPage';
+import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './services/toast';
 import { DialogProvider } from './services/dialog';
 
@@ -32,6 +33,7 @@ function ProtectedLayout() {
 export default function App() {
   return (
     <Provider store={store}>
+      <ErrorBoundary>
       <ToastProvider>
       <DialogProvider>
       <BrowserRouter>
@@ -59,6 +61,7 @@ export default function App() {
       </BrowserRouter>
       </DialogProvider>
       </ToastProvider>
+      </ErrorBoundary>
     </Provider>
   );
 }

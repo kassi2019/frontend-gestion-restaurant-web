@@ -10,17 +10,20 @@ export interface User {
   typeAbonnement?: string; dateFinAbonnement?: string | null;
   modeGestion?: string;
   modules?: ModuleInfo[];
+  abonnementExpire?: boolean;
 }
 
 interface AuthState {
   user: User | null; token: string | null;
   loading: boolean; error: string | null;
+  abonnementExpire: boolean;
 }
 
 const initialState: AuthState = {
   user: JSON.parse(localStorage.getItem('user') || 'null'),
   token: localStorage.getItem('token'),
   loading: false, error: null,
+  abonnementExpire: JSON.parse(localStorage.getItem('abonnementExpire') || 'false'),
 };
 
 export const login = createAsyncThunk(
@@ -29,8 +32,11 @@ export const login = createAsyncThunk(
     try {
       const { data } = await authApi.login(credentials);
       localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.utilisateur));
-      return data;
+      // Ajouter le flag abonnementExpire à l'utilisateur stocké
+      const userWithFlag = { ...data.utilisateur, abonnementExpire: data.abonnementExpire || false };
+      localStorage.setItem('user', JSON.stringify(userWithFlag));
+      localStorage.setItem('abonnementExpire', JSON.stringify(data.abonnementExpire || false));
+      return { ...data, utilisateur: userWithFlag };
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Erreur de connexion';
       return rejectWithValue(msg);
@@ -43,8 +49,9 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     logout: (state) => {
-      state.user = null; state.token = null;
+      state.user = null; state.token = null; state.abonnementExpire = false;
       localStorage.removeItem('token'); localStorage.removeItem('user');
+      localStorage.removeItem('abonnementExpire');
     },
     updateUser: (state, action) => {
       state.user = { ...state.user!, ...action.payload };
@@ -57,6 +64,7 @@ const authSlice = createSlice({
       .addCase(login.pending, (s) => { s.loading = true; s.error = null; })
       .addCase(login.fulfilled, (s, a) => {
         s.loading = false; s.token = a.payload.token; s.user = a.payload.utilisateur;
+        s.abonnementExpire = a.payload.abonnementExpire || false;
       })
       .addCase(login.rejected, (s, a) => { s.loading = false; s.error = a.payload as string; });
   },

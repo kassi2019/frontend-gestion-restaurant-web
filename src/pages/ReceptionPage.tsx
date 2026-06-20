@@ -75,7 +75,7 @@ export default function ReceptionPage() {
     return serveurs.map((s: any) => {
       const charge = commandes.filter((c: any) => {
         if (!c || c.serveurId !== s.id) return false;
-        if (c.statut !== 'EN_ATTENTE' && c.statut !== 'VALIDEE') return false;
+        if (c.statut === 'PAYEE' || c.statut === 'SERVIE' || c.statut === 'ANNULEE') return false;
         const d = new Date(c.dateCommande);
         const dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         return dStr === aujourdhui;
@@ -109,7 +109,7 @@ export default function ReceptionPage() {
   const grouperParTable = (cmds: any[]) => {
     const groupes: Record<number, any> = {};
     for (const c of cmds) {
-      if (!c) continue;
+      if (!c || c.tableId == null) continue;
       const tid = c.tableId;
       if (!groupes[tid]) {
         groupes[tid] = {
@@ -152,6 +152,7 @@ export default function ReceptionPage() {
 
   // Valider → RECEPTION_VALIDE → impression auto
   const handleValider = async (cmd: any) => {
+    if (!cmd?.id) return;
     try {
       await commandesApi.updateStatut(cmd.id, 'RECEPTION_VALIDE');
       toast.success('Commande validée !');
@@ -168,15 +169,15 @@ export default function ReceptionPage() {
 
   // Tickets filtres
   const getDetailsCuisine = (cmd: any) => {
-    if (!cmd?.details) return [];
+    if (!cmd?.details || !Array.isArray(cmd.details)) return [];
     return cmd.details.filter((d: any) =>
-      ['CUISINE', 'DESSERT'].includes(d.menu?.categorie?.destination)
+      ['CUISINE', 'DESSERT'].includes(d?.menu?.categorie?.destination)
     );
   };
   const getDetailsBar = (cmd: any) => {
-    if (!cmd?.details) return [];
+    if (!cmd?.details || !Array.isArray(cmd.details)) return [];
     return cmd.details.filter((d: any) =>
-      d.menu?.categorie?.destination === 'BAR'
+      d?.menu?.categorie?.destination === 'BAR'
     );
   };
 
@@ -262,9 +263,11 @@ export default function ReceptionPage() {
 
   // Imprimer les tickets groupés par destination (appel backend)
   const imprimerTout = async (item: any) => {
-    const commandes = item.commandes || [item];
+    const commandes = item?.commandes || [item];
+    if (!commandes.length) return;
     try {
       for (const cmd of commandes) {
+        if (!cmd?.id) continue;
         const { data } = await printerApi.printCommandeTickets(cmd.id);
         if (!data.ok) { toast.error(data.message || 'Échec impression'); return; }
       }
@@ -324,7 +327,8 @@ export default function ReceptionPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {currentData.map((item: any) => {
+          {(Array.isArray(currentData) ? currentData : []).map((item: any) => {
+            if (!item || item.tableId == null) return null;
             const isExpanded = expandedIds.has(item.tableId);
             const serveurNom = getServeurNom(item.serveurId);
             const isEnAttente = item.statut === 'EN_ATTENTE';
@@ -390,7 +394,7 @@ export default function ReceptionPage() {
                         👤 {item.serveurId ? 'Changer serveur' : 'Assigner serveur'}
                       </button>
                     )}
-                    <button onClick={() => { item.commandes.forEach((c: any) => handleValider(c)); }}
+                    <button onClick={() => { (item.commandes || []).forEach((c: any) => c && handleValider(c)); }}
                       className="flex-1 py-2 rounded-xl text-sm font-bold cursor-pointer text-white bg-green-500 hover:bg-green-600 transition-colors">
                       ✅ Valider + 🖨
                     </button>
@@ -400,7 +404,7 @@ export default function ReceptionPage() {
                 {/* Mode 1 (SERVEUR) : VALIDEE/SERVEUR_VALIDE → 2 boutons */}
                 {isModeServeur && (item.statut === 'VALIDEE' || item.statut === 'SERVEUR_VALIDE') && (
                   <div className="border-t border-gray-100 px-4 py-3 flex gap-3">
-                    <button onClick={() => { item.commandes.forEach((c: any) => handleValider(c)); }}
+                    <button onClick={() => { (item.commandes || []).forEach((c: any) => c && handleValider(c)); }}
                       className="flex-1 py-2 rounded-xl text-sm font-bold cursor-pointer text-white bg-green-500 hover:bg-green-600 transition-colors">
                       ✅ Valider réception + 🖨
                     </button>
@@ -429,7 +433,7 @@ export default function ReceptionPage() {
               </div>
             );
           })}
-          {currentData.length === 0 && (
+          {(!Array.isArray(currentData) || currentData.length === 0) && (
             <p className="text-center text-gray-400 py-10">
               {activeTab === 'arrivees' ? '🎉 Aucune commande en attente' : activeTab === 'validees' ? 'Aucune commande validée' : 'Aucune commande payée'}
             </p>

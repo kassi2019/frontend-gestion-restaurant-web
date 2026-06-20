@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState } from '../store';
 import { logout } from '../store/authSlice';
@@ -30,10 +30,21 @@ const allMenuItems = [
 export default function Layout() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
   const user = useSelector((s: RootState) => s.auth.user);
+  const abonnementExpire = useSelector((s: RootState) => s.auth.abonnementExpire);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [notifBadge, setNotifBadge] = useState(0);
+
+  const isAdminExpired = abonnementExpire && user?.role === 'ADMIN';
+
+  // Rediriger l'ADMIN vers la page d'abonnement si l'abonnement est expiré
+  useEffect(() => {
+    if (isAdminExpired && location.pathname !== '/abonnement') {
+      navigate('/abonnement', { replace: true });
+    }
+  }, [isAdminExpired, location.pathname, navigate]);
 
   const handleLogout = () => { disconnectSocket(); dispatch(logout()); navigate('/'); };
 
@@ -88,7 +99,16 @@ export default function Layout() {
         {/* Menu */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
           {(user?.modules?.length ? user.modules.map((m: any) => ({ path: m.route, label: m.nom, icon: m.icon })) : allMenuItems)
-            .filter((m: any) => allMenuItems.find(a => a.path === m.path)?.roles.includes(user?.role || '') ?? true)
+            .filter((m: any) => {
+              // Vérifier que le rôle a accès à ce menu
+              const roleAllowed = allMenuItems.find(a => a.path === m.path)?.roles.includes(user?.role || '') ?? true;
+              if (!roleAllowed) return false;
+              // Si abonnement expiré et ADMIN, afficher uniquement Abonnement et Notifications
+              if (isAdminExpired) {
+                return m.path === '/abonnement' || m.path === '/notifications';
+              }
+              return true;
+            })
             .map((m: any) => (
             <NavLink key={m.path} to={m.path} end={m.path === '/'}
               onClick={() => { if (m.path === '/notifications') setNotifBadge(0); }}

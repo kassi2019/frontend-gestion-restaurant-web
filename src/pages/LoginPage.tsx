@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { login, clearError } from '../store/authSlice';
 import { authApi } from '../services/api';
 import type { RootState, AppDispatch } from '../store';
@@ -7,7 +8,8 @@ import { useToast } from '../services/toast';
 
 export default function LoginPage() {
   const dispatch = useDispatch<AppDispatch>();
-  const { loading, error } = useSelector((s: RootState) => s.auth);
+  const navigate = useNavigate();
+  const { loading, error, user, abonnementExpire } = useSelector((s: RootState) => s.auth);
   const toast = useToast();
   const [tel, setTel] = useState('');
   const [pwd, setPwd] = useState('');
@@ -19,6 +21,13 @@ export default function LoginPage() {
   const [forgotPwd, setForgotPwd] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
+
+  // Rediriger l'ADMIN vers la page d'abonnement si l'abonnement est expiré
+  useEffect(() => {
+    if (user && abonnementExpire && user.role === 'ADMIN') {
+      navigate('/abonnement', { replace: true });
+    }
+  }, [user, abonnementExpire, navigate]);
 
   const isExpired = error?.includes('Abonnement expiré');
 
